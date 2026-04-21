@@ -1,0 +1,24 @@
+# Build/runtime outputs that shouldn't end up in the image
+__pycache__/
+*.pyc
+*.pyo
+*.so
+*.egg-info/
+build/
+dist/
+
+# Reviewer-downloaded artifacts (mounted at /work at runtime, not baked in)
+artifacts/
+runs/
+
+# Raw data (never ship in the image)
+data/*_raw/
+data/hacc_big*
+data/*.tar.gz
+data/*.f32
+data/*.hdf5
+
+# Host-specific junk
+.DS_Store
+.idea/
+.vscode/

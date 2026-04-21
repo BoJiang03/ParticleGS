@@ -1,0 +1,170 @@
+{
+  "experiment": {
+    "name": "C55_block_0.06",
+    "output_root": "scientific_partical_visualization/todo_unified_experiments/runs/protocols"
+  },
+  "paths": {
+    "raw_x": "scientific_partical_visualization/todo_unified_experiments/runs/protocols/block_test_0.06/raw/xx.f32",
+    "raw_y": "scientific_partical_visualization/todo_unified_experiments/runs/protocols/block_test_0.06/raw/yy.f32",
+    "raw_z": "scientific_partical_visualization/todo_unified_experiments/runs/protocols/block_test_0.06/raw/zz.f32"
+  },
+  "scripts": {
+    "prepare_data": "scientific_partical_visualization/todo_unified_experiments/scripts/prepare_data.py",
+    "generate_images_progressive": "scientific_partical_visualization/todo_unified_experiments/scripts/generate_images_progressive.py",
+    "standard_train": "scientific_partical_visualization/todo_unified_experiments/scripts/train_with_checkpoint.py",
+    "standard_render": "scientific_partical_visualization/todo_unified_experiments/scripts/render_standard.py",
+    "viz_aware_train": "scientific_partical_visualization/todo_unified_experiments/viz_aware_backend/train_viz_aware.py",
+    "viz_aware_render": "scientific_partical_visualization/todo_unified_experiments/viz_aware_backend/render_viz_aware.py",
+    "analyze_model": "scientific_partical_visualization/todo_unified_experiments/scripts/analyze_model.py"
+  },
+  "options": {
+    "skip_intermediate_eval": true,
+    "skip_final_render": true
+  },
+  "prepare": {
+    "reuse_if_exists": true,
+    "num_points_raw": 0,
+    "num_points_ply": 200000
+  },
+  "evaluation": {
+    "render": {
+      "mode": "sampled",
+      "distribution": "beta",
+      "beta_concentration": 3.0,
+      "radius": 0.01,
+      "opacity": 0.05,
+      "radius_range": [0.0025, 0.0175],
+      "opacity_range": [0.0125, 0.0875],
+      "seed": 142
+    },
+    "items": [
+      {"id": "eval_far", "source": "multi_orbit", "resolution": [1920, 1080], "num_frames": 80, "orbit_radii": "0.65"},
+      {"id": "eval_mid", "source": "multi_orbit", "resolution": [1920, 1080], "num_frames": 80, "orbit_radii": "0.45"},
+      {"id": "eval_near", "source": "multi_orbit", "resolution": [1920, 1080], "num_frames": 80, "orbit_radii": "0.30"}
+    ]
+  },
+  "stages": [
+    {
+      "id": "train_ext_4k",
+      "data": {
+        "source": "external",
+        "resolution": [3840, 2160],
+        "num_frames": 200,
+        "split_seed": 42
+      },
+      "render": {
+        "mode": "sampled", "distribution": "beta", "beta_concentration": 3.0,
+        "radius": 0.01, "opacity": 0.05,
+        "radius_range": [0.0025, 0.0175], "opacity_range": [0.0125, 0.0875], "seed": 142
+      },
+      "viz_aware": {"enabled": true},
+      "train": {
+        "backend": "viz_aware",
+        "iterations": 10000,
+        "init_iterations": 10,
+        "save_iterations": [],
+        "checkpoint_iterations": [],
+        "resolution_scale": 2,
+        "densification_interval": 100,
+        "opacity_reset_interval": 3000,
+        "densify_until_iter": 15000,
+        "densify_grad_threshold": 0.0003,
+        "position_lr_init": 8e-05,
+        "position_lr_max_steps": 50000,
+        "scaling_lr": 0.0005,
+        "min_scale_pixels": 1.0,
+        "sh_degree": 0,
+        "min_opacity": 0.03,
+        "antialiasing": true,
+        "extra_args": ""
+      }
+    },
+    {
+      "id": "train_ext_6k",
+      "resume_from": "train_ext_4k",
+      "data": {
+        "source": "external",
+        "resolution": [5760, 3240],
+        "num_frames": 200,
+        "split_seed": 42
+      },
+      "render": {
+        "mode": "sampled", "distribution": "beta", "beta_concentration": 3.0,
+        "radius": 0.01, "opacity": 0.05,
+        "radius_range": [0.0025, 0.0175], "opacity_range": [0.0125, 0.0875], "seed": 142
+      },
+      "viz_aware": {"enabled": true},
+      "train": {
+        "backend": "viz_aware",
+        "iterations": 12000,
+        "init_iterations": 10,
+        "save_iterations": [],
+        "checkpoint_iterations": [],
+        "resolution_scale": 1,
+        "densification_interval": 300,
+        "opacity_reset_interval": 3000,
+        "densify_until_iter": 16000,
+        "densify_grad_threshold": 0.0004,
+        "position_lr_init": 8e-05,
+        "position_lr_max_steps": 50000,
+        "scaling_lr": 0.0005,
+        "min_scale_pixels": 1.0,
+        "sh_degree": 0,
+        "min_opacity": 0.03,
+        "antialiasing": true,
+        "extra_args": ""
+      }
+    },
+    {
+      "id": "train_mix_6k_align",
+      "resume_from": "train_ext_6k",
+      "data": {
+        "source": "mix",
+        "mix_sources": {
+          "external": {
+            "resolution": [5760, 3240],
+            "num_frames": 200,
+            "render": {
+              "mode": "sampled", "distribution": "beta", "beta_concentration": 3.0,
+              "radius": 0.01, "opacity": 0.05,
+              "radius_range": [0.0025, 0.0175], "opacity_range": [0.0125, 0.0875], "seed": 142
+            }
+          },
+          "internal": {
+            "resolution": [5760, 3240],
+            "num_frames": 200,
+            "internal_bounds_scale": 0.98,
+            "render": {
+              "mode": "sampled", "distribution": "beta", "beta_concentration": 3.0,
+              "radius": 0.01, "opacity": 0.05,
+              "radius_range": [0.0025, 0.0175], "opacity_range": [0.0125, 0.0875], "seed": 242
+            }
+          }
+        },
+        "mix_ratio": 0.8,
+        "split_seed": 42
+      },
+      "viz_aware": {"enabled": true},
+      "train": {
+        "backend": "viz_aware",
+        "iterations": 10000,
+        "init_iterations": 10,
+        "save_iterations": [],
+        "checkpoint_iterations": [],
+        "resolution_scale": 1,
+        "densification_interval": 300,
+        "opacity_reset_interval": 3000,
+        "densify_until_iter": 27000,
+        "densify_grad_threshold": 0.0004,
+        "position_lr_init": 8e-05,
+        "position_lr_max_steps": 50000,
+        "scaling_lr": 0.0005,
+        "min_scale_pixels": 1.0,
+        "sh_degree": 0,
+        "min_opacity": 0.03,
+        "antialiasing": true,
+        "extra_args": ""
+      }
+    }
+  ]
+}

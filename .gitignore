@@ -1,0 +1,11 @@
+# Build artifacts from install.sh
+SZ3/
+LCP/
+*.egg-info/
+__pycache__/
+
+# Runtime outputs
+runs/
+logs/
+data/hacc_raw/
+data/fire2_raw/

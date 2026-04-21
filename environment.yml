@@ -1,0 +1,24 @@
+name: particlegs
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.12
+  - paraview=6.0.1=py312h1907c67_5
+  - h5py
+  - cmake
+  - ninja
+  - git
+  - curl
+  - pip
+  - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu130
+      - torch==2.10.0
+      - torchvision==0.25.0
+      - numpy
+      - plyfile
+      - tqdm
+      - Pillow
+      - opencv-python
+      - scipy
+      - scikit-image

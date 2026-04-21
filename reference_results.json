@@ -1,0 +1,152 @@
+{
+  "_comment": [
+    "Reference values captured on 1x RTX PRO 6000 Blackwell (96 GB), Ubuntu 24.04,",
+    "CUDA 13, ParaView 6.0.1=py312h1907c67_5. Consumed by verify_results.py.",
+    "",
+    "tolerance_class semantics:",
+    "  hw_independent  - should match on any CUDA-capable GPU within tolerance",
+    "                    (PSNR, Gaussian counts, model sizes, compression ratios)",
+    "  hw_dependent    - absolute value is GPU-specific; verify only as trend",
+    "                    (absolute FPS, wall-clock times, peak memory in MB)",
+    "  trend           - sign/order must match (e.g. 3DGS FPS > ParaView FPS)",
+    "",
+    "Expected stochastic noise in 3DGS training: +/-3% Gaussian count, +/-0.3 dB PSNR."
+  ],
+  "metrics": [
+    {
+      "path": "exp4.blocks_2.finetuned.masked_psnr",
+      "expected": 27.30,
+      "class": "hw_independent",
+      "tolerance_abs": 0.3,
+      "unit": "dB",
+      "paper_ref": "Tab. 3 (2-block finetuned)"
+    },
+    {
+      "path": "exp4.blocks_2.finetuned.num_gaussians",
+      "expected": 564062,
+      "class": "hw_independent",
+      "tolerance_rel": 0.03,
+      "paper_ref": "Tab. 3 (2-block finetuned)"
+    },
+    {
+      "path": "exp4.blocks_2.finetuned.size_mb",
+      "expected": 36.6,
+      "class": "hw_independent",
+      "tolerance_rel": 0.03,
+      "unit": "MB"
+    },
+    {
+      "path": "exp4.blocks_4.finetuned.masked_psnr",
+      "expected": 27.50,
+      "class": "hw_independent",
+      "tolerance_abs": 0.3,
+      "unit": "dB",
+      "paper_ref": "Tab. 3 (4-block finetuned)"
+    },
+    {
+      "path": "exp4.blocks_4.finetuned.num_gaussians",
+      "expected": 605702,
+      "class": "hw_independent",
+      "tolerance_rel": 0.03,
+      "paper_ref": "Tab. 3 (4-block finetuned)"
+    },
+    {
+      "path": "exp4.blocks_4.finetuned.size_mb",
+      "expected": 39.3,
+      "class": "hw_independent",
+      "tolerance_rel": 0.03,
+      "unit": "MB"
+    },
+
+    {
+      "path": "exp_fire2.avg_masked_psnr",
+      "expected": 25.05,
+      "class": "hw_independent",
+      "tolerance_abs": 0.3,
+      "unit": "dB",
+      "paper_ref": "FIRE-2 generalization row"
+    },
+    {
+      "path": "exp_fire2.num_gaussians",
+      "expected": 81055,
+      "class": "hw_independent",
+      "tolerance_rel": 0.03,
+      "paper_ref": "FIRE-2 generalization row"
+    },
+    {
+      "path": "exp_fire2.size_mb",
+      "expected": 5.3,
+      "class": "hw_independent",
+      "tolerance_rel": 0.03,
+      "unit": "MB"
+    },
+    {
+      "path": "exp_fire2.cr",
+      "expected": 584.0,
+      "class": "hw_independent",
+      "tolerance_rel": 0.03,
+      "paper_ref": "FIRE-2 generalization row"
+    },
+
+    {
+      "path": "exp6.summary.compression_ratio",
+      "expected": 85.8,
+      "class": "hw_independent",
+      "tolerance_rel": 0.03,
+      "paper_ref": "Tab. 6"
+    },
+    {
+      "path": "exp6.summary.model_size_mb",
+      "expected": 39.3,
+      "class": "hw_independent",
+      "tolerance_rel": 0.03,
+      "unit": "MB"
+    },
+    {
+      "path": "exp6.summary.3dgs_fps",
+      "expected": 803.06,
+      "class": "hw_dependent",
+      "unit": "FPS",
+      "reference_gpu": "RTX PRO 6000 Blackwell",
+      "note": "Absolute FPS is GPU-specific. Reviewer's value may differ substantially."
+    },
+    {
+      "path": "exp6.summary.paraview_fps",
+      "expected": 0.318,
+      "class": "hw_dependent",
+      "unit": "FPS",
+      "reference_gpu": "RTX PRO 6000 Blackwell"
+    },
+    {
+      "path": "exp6.summary.speedup",
+      "expected": 2525.3,
+      "class": "trend",
+      "trend_rule": "gt",
+      "trend_threshold": 100.0,
+      "paper_ref": "Tab. 6 (speedup vs ParaView)",
+      "note": "Exact speedup is GPU-pair specific; paper claim is that 3DGS is >100x faster than ParaView. Trend test passes if speedup > 100."
+    },
+
+    {
+      "path": "exp11.inference_memory.4_block_finetuned.num_gaussians",
+      "expected": 605702,
+      "class": "hw_independent",
+      "tolerance_rel": 0.03
+    },
+    {
+      "path": "exp11.training_memory.peak_mb",
+      "expected": 10505,
+      "class": "hw_dependent",
+      "unit": "MB",
+      "note": "Peak GPU memory during training S3 stage. Varies slightly across CUDA versions."
+    },
+    {
+      "path": "exp11.finetune_cost.finetune_time_min",
+      "expected": 14.4,
+      "class": "hw_dependent",
+      "unit": "min",
+      "reference_gpu": "RTX PRO 6000 Blackwell",
+      "note": "Measured on the reviewer's first EXP-11 run; reruns show MISSING because the finetuned checkpoint cache hit is detected and the timing is skipped."
+    }
+  ]
+}
