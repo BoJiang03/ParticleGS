@@ -27,7 +27,7 @@ We do not require reviewer access to a specific system; reviewers run the artifa
 |---|---|
 | Paper title | *Visualization-Aware 3D Gaussian Splatting for Scientific Particle Data Compression and Rendering* |
 | Artifact version | `v1.0` |
-| Artifact (review phase) | `[PLACEHOLDER — anonymous.4open.science URL, filled at submission time]` |
+| Artifact (review phase) | https://anonymous.4open.science/r/ParticleGS-5862/ |
 | Artifact (camera-ready) | `[PLACEHOLDER — Zenodo DOI, minted from GitHub release tag sc26-final after acceptance]` |
 | Contact | *Anonymous during review. De-anonymized contact email will be provided in the camera-ready version.* |
 
