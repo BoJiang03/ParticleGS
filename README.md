@@ -216,4 +216,16 @@ Full numerical tables appear in `runs/summary/tables.md`.
 
 ## 9. License
 
-`[PLACEHOLDER — license to be confirmed; original 3DGS code is non-commercial research license]`
+The authors' code in this artifact (pipelines, experiments, configs, and
+documentation) is distributed under the **Gaussian-Splatting Research License**
+(INRIA, non-commercial research only), inherited from the upstream
+`diff-gaussian-rasterization` and `simple-knn` CUDA extensions this work builds on.
+
+Third-party dependencies retain their original licenses; see the `LICENSE*`
+files under each directory:
+
+- `submodules/diff-gaussian-rasterization/LICENSE.md`, `submodules/simple-knn/LICENSE.md` — Gaussian-Splatting Research License (INRIA, non-commercial research only)
+- `submodules/fused-ssim/LICENSE` — MIT
+- `submodules/diff-gaussian-rasterization/third_party/glm/` — MIT (G-Truc Creation)
+- `submodules/diff-gaussian-rasterization/third_party/stbi_image_write.h` — MIT / public domain (Sean Barrett)
+- `SZ3/` and `LCP/` (cloned by `install.sh`) — see each project's own `LICENSE`

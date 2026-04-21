@@ -195,9 +195,6 @@ def main():
         model_dir = stage_dir / "model"
         data_dir = stage_dir / "data"
 
-        # TODO: Generate stage-specific data if needed
-        # For now assume data_dir exists or is specified in stage config
-
         run_training_stage(
             stage, model_dir, prev_model, data_dir, logs,
             stage_idx=i, gpu=args.gpu)
