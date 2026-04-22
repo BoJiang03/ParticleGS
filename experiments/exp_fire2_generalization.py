@@ -124,22 +124,22 @@ def ensure_fire2_shared_data(shared_dir, gpu=0):
         print(f"  [FIRE-2] Generating eval images: {evd['id']}...")
         _gen_eval(vtp_path, ed, evd["orbit_radii"], norm_path, logs, evd["id"])
 
-    # Phase 3: PLY. Pass the legacy scale override so the initial PLY is
-    # reproduced at the same scale the OLD run used (see
-    # LEGACY_FIRE2_PLY_SCALE docstring above).
-    if not ply_path.exists():
-        print(f"  [FIRE-2] Creating initial PLY (legacy scale {LEGACY_FIRE2_PLY_SCALE:.6e})...")
-        run_cmd(
-            [PYTHON_BIN, str(PREPARE_SCRIPT),
-             "--raw_x", str(raw_dir / "xx.f32"),
-             "--raw_y", str(raw_dir / "yy.f32"),
-             "--raw_z", str(raw_dir / "zz.f32"),
-             "--output_dir", str(shared_dir),
-             "--only_ply", "--num_points_ply", str(NUM_INIT_PLY),
-             "--ply_scale_override", f"{LEGACY_FIRE2_PLY_SCALE:.10e}"],
-            log_path=logs / "create_ply.log")
-    else:
-        print(f"  [FIRE-2] PLY exists")
+    # Phase 3: PLY with legacy scale override. Always regenerate — Phase 1's
+    # --skip_images prepare_data.py call writes a PLY at the frozen scale as
+    # a side-effect, so an existence check here would silently keep the wrong
+    # scale and drop the override.
+    if ply_path.exists():
+        ply_path.unlink()
+    print(f"  [FIRE-2] Creating initial PLY (legacy scale {LEGACY_FIRE2_PLY_SCALE:.6e})...")
+    run_cmd(
+        [PYTHON_BIN, str(PREPARE_SCRIPT),
+         "--raw_x", str(raw_dir / "xx.f32"),
+         "--raw_y", str(raw_dir / "yy.f32"),
+         "--raw_z", str(raw_dir / "zz.f32"),
+         "--output_dir", str(shared_dir),
+         "--only_ply", "--num_points_ply", str(NUM_INIT_PLY),
+         "--ply_scale_override", f"{LEGACY_FIRE2_PLY_SCALE:.10e}"],
+        log_path=logs / "create_ply.log")
 
     return {
         "vtp": vtp_path,
