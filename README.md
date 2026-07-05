@@ -209,22 +209,8 @@ Full numerical tables appear in `runs/summary/tables.md`.
 
 ## 8. Citation
 
-If you use this artifact, please cite the SC26 paper:
-
-```bibtex
-@inproceedings{jiang2026particlegs,
-  title     = {3D Gaussian Splatting for Scientific Particle Data
-               Compression and Rendering},
-  author    = {Jiang, Bo and Liu, Youyuan and Yang, Taolue and
-               Di, Sheng and Jin, Sian},
-  booktitle = {Proceedings of the International Conference for High
-               Performance Computing, Networking, Storage, and Analysis
-               (SC '26)},
-  year      = {2026},
-  address   = {St.\ Louis, MO, USA},
-  note      = {To appear}
-}
-```
+Final BibTeX will be added once the camera-ready version and DOI are
+available (SC26 proceedings, November 2026).
 
 ---
 
