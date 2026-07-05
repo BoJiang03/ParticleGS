@@ -50,7 +50,7 @@ Peak VRAM and timing are measured by `exp11_resource_profiling.py` on our refere
 
 - **OS:** Linux (Ubuntu 22.04+ verified on 24.04).
 - **Multi-GPU not required.** Training runs on a single GPU; the optional `--num_gpus 2` flag parallelises the per-block training loop across two GPUs to cut wall-clock by ~1.8×.
-- **Disk** is dominated by cached ParaView ground-truth images (~11 GB) and per-block training state; ~40 GB free is enough for the default `--exp 1,4,6,7,8,11,12,13` run.
+- **Disk** is dominated by cached ParaView ground-truth images (~11 GB) and per-block training state; ~40 GB free is enough for the default `--exp 1,4,6,7,8,11,13` run.
 
 ---
 
@@ -209,8 +209,21 @@ Full numerical tables appear in `runs/summary/tables.md`.
 
 ## 8. Citation
 
+If you use this artifact, please cite the SC26 paper:
+
 ```bibtex
-[PLACEHOLDER — final BibTeX once paper is assigned a citation]
+@inproceedings{jiang2026particlegs,
+  title     = {3D Gaussian Splatting for Scientific Particle Data
+               Compression and Rendering},
+  author    = {Jiang, Bo and Liu, Youyuan and Yang, Taolue and
+               Di, Sheng and Jin, Sian},
+  booktitle = {Proceedings of the International Conference for High
+               Performance Computing, Networking, Storage, and Analysis
+               (SC '26)},
+  year      = {2026},
+  address   = {St.\ Louis, MO, USA},
+  note      = {To appear}
+}
 ```
 
 ---
@@ -230,24 +243,3 @@ files under each directory:
 - `submodules/diff-gaussian-rasterization/third_party/glm/` — MIT (G-Truc Creation)
 - `submodules/diff-gaussian-rasterization/third_party/stbi_image_write.h` — MIT / public domain (Sean Barrett)
 - `SZ3/` and `LCP/` (cloned by `install.sh`) — see each project's own `LICENSE`
-
----
-
-## 10. Citation
-
-If you use this artifact, please cite the SC26 paper:
-
-```bibtex
-@inproceedings{jiang2026particlegs,
-  title     = {3D Gaussian Splatting for Scientific Particle Data
-               Compression and Rendering},
-  author    = {Jiang, Bo and Liu, Youyuan and Yang, Taolue and
-               Di, Sheng and Jin, Sian},
-  booktitle = {Proceedings of the International Conference for High
-               Performance Computing, Networking, Storage, and Analysis
-               (SC '26)},
-  year      = {2026},
-  address   = {St.\ Louis, MO, USA},
-  note      = {To appear}
-}
-```
