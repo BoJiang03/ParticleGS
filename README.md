@@ -230,3 +230,24 @@ files under each directory:
 - `submodules/diff-gaussian-rasterization/third_party/glm/` — MIT (G-Truc Creation)
 - `submodules/diff-gaussian-rasterization/third_party/stbi_image_write.h` — MIT / public domain (Sean Barrett)
 - `SZ3/` and `LCP/` (cloned by `install.sh`) — see each project's own `LICENSE`
+
+---
+
+## 10. Citation
+
+If you use this artifact, please cite the SC26 paper:
+
+```bibtex
+@inproceedings{jiang2026particlegs,
+  title     = {3D Gaussian Splatting for Scientific Particle Data
+               Compression and Rendering},
+  author    = {Jiang, Bo and Liu, Youyuan and Yang, Taolue and
+               Di, Sheng and Jin, Sian},
+  booktitle = {Proceedings of the International Conference for High
+               Performance Computing, Networking, Storage, and Analysis
+               (SC '26)},
+  year      = {2026},
+  address   = {St.\ Louis, MO, USA},
+  note      = {To appear}
+}
+```

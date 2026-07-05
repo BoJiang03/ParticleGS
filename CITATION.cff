@@ -1,0 +1,46 @@
+cff-version: 1.2.0
+message: "If you use this artifact, please cite the SC26 paper (see preferred-citation)."
+title: "ParticleGS: 3D Gaussian Splatting for Scientific Particle Data Compression and Rendering (SC26 artifact)"
+type: software
+repository-code: "https://github.com/BoJiang03/ParticleGS"
+license-url: "https://github.com/BoJiang03/ParticleGS#9-license"
+authors:
+  - family-names: Jiang
+    given-names: Bo
+    affiliation: "Temple University"
+    orcid: "https://orcid.org/0009-0004-4893-7836"
+  - family-names: Liu
+    given-names: Youyuan
+    affiliation: "Temple University"
+  - family-names: Yang
+    given-names: Taolue
+    affiliation: "Temple University"
+  - family-names: Di
+    given-names: Sheng
+    affiliation: "Argonne National Laboratory"
+  - family-names: Jin
+    given-names: Sian
+    affiliation: "Temple University"
+preferred-citation:
+  type: conference-paper
+  title: "3D Gaussian Splatting for Scientific Particle Data Compression and Rendering"
+  authors:
+    - family-names: Jiang
+      given-names: Bo
+      affiliation: "Temple University"
+      orcid: "https://orcid.org/0009-0004-4893-7836"
+    - family-names: Liu
+      given-names: Youyuan
+      affiliation: "Temple University"
+    - family-names: Yang
+      given-names: Taolue
+      affiliation: "Temple University"
+    - family-names: Di
+      given-names: Sheng
+      affiliation: "Argonne National Laboratory"
+    - family-names: Jin
+      given-names: Sian
+      affiliation: "Temple University"
+  collection-title: "Proceedings of the International Conference for High Performance Computing, Networking, Storage, and Analysis (SC '26)"
+  year: 2026
+  notes: "To appear"
