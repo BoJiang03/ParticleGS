@@ -1,6 +1,7 @@
-# ParticleGS — SC Artifact
+# ParticleGS — SC26 Artifact
 
-Reviewer-facing quickstart for the **ParticleGS** paper artifact.
+Reviewer-facing quickstart for the **ParticleGS** paper artifact
+(accepted at SC26, paper `pap525`).
 
 > Full documentation is in the accompanying **Artifact Description (AD)** PDF.
 > This README is a short path for reviewers who just want to verify the badge.
@@ -10,7 +11,7 @@ Reviewer-facing quickstart for the **ParticleGS** paper artifact.
 ## 1. Badge target
 
 - **Primary:** `Results Reproduced`
-- **Secondary:** `Artifact Available` (Zenodo DOI below)
+- **Also applied for:** `Artifacts Evaluated — Functional`, `Artifacts Available` (Zenodo DOI below)
 
 Reproducibility claim is split into two tiers:
 
@@ -25,11 +26,11 @@ We do not require reviewer access to a specific system; reviewers run the artifa
 
 | Item | Value |
 |---|---|
-| Paper title | *Visualization-Aware 3D Gaussian Splatting for Scientific Particle Data Compression and Rendering* |
+| Paper title | *3D Gaussian Splatting for Scientific Particle Data Compression and Rendering* |
 | Artifact version | `v1.0` |
-| Artifact (review phase) | https://anonymous.4open.science/r/ParticleGS-5862/ |
-| Artifact (camera-ready) | `[PLACEHOLDER — Zenodo DOI, minted from GitHub release tag sc26-final after acceptance]` |
-| Contact | *Anonymous during review. De-anonymized contact email will be provided in the camera-ready version.* |
+| Repository | https://github.com/BoJiang03/ParticleGS |
+| Archival DOI | `[Zenodo DOI — minted from GitHub release tag sc26-final at the SC26 artifact-freeze deadline]` |
+| Contact | Bo Jiang \<bo.jiang@temple.edu\> |
 
 ---
 
