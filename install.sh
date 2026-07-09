@@ -48,17 +48,22 @@ fi
 # crashes at iteration 0 with a garbage multi-TiB allocation. Pointing CUDA_HOME
 # at $CONDA_PREFIX makes the build reproducible and host-CUDA-independent.
 #
-# TORCH_CUDA_ARCH_LIST embeds native SASS for Turing→Blackwell plus Blackwell
-# PTX, so the extensions run natively on reviewers' GPUs (any of Turing, Ampere,
-# Ada, Hopper, Blackwell) and JIT forward to newer cards. (Note: torch drops
-# this list if the build path contains the substring "arch"; correctness is
-# unaffected because nvcc still emits sm_75 PTX that JITs forward, but a clean
-# path additionally gives native SASS.)
+# TORCH_CUDA_ARCH_LIST embeds native SASS for every GPU generation CUDA 13.0
+# supports and can plausibly be a reviewer's card — Turing (7.5), Ampere
+# (8.0/8.6), Ada (8.9), Hopper (9.0), datacenter Blackwell (10.0), consumer
+# Blackwell (12.0) — plus compute_100 AND compute_120 PTX so *future* GPUs in
+# both Blackwell families JIT forward. CUDA 13.0 dropped Volta/Pascal, so sm_75
+# (Turing) is the hard floor; older GPUs cannot run the cu130 build at all.
+# Reviewers with an unlisted arch can override this before running install.sh,
+# e.g. TORCH_CUDA_ARCH_LIST="9.0" bash install.sh.
+# (Note: torch's cpp_extension silently drops this list if any build path
+# contains the substring "arch"; correctness still holds because nvcc then emits
+# sm_75 PTX that JITs forward, but a clean path additionally gives native SASS.)
 if [ "$SKIP_ENV" = false ] || [ -n "${CONDA_PREFIX}" ]; then
     export CUDA_HOME="${CONDA_PREFIX}"
     export PATH="${CUDA_HOME}/bin:${PATH}"
 fi
-export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-7.5;8.0;8.6;8.9;9.0;12.0+PTX}"
+export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-7.5;8.0;8.6;8.9;9.0;10.0+PTX;12.0+PTX}"
 echo "[2/4] Building CUDA extensions (diff-gaussian-rasterization, simple-knn, fused-ssim)..."
 echo "      CUDA_HOME=${CUDA_HOME}"
 echo "      nvcc: $(command -v nvcc || echo 'NOT FOUND') ($(nvcc --version 2>/dev/null | grep -oE 'release [0-9.]+' || echo '?'))"

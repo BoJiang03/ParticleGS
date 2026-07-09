@@ -44,9 +44,11 @@ Peak VRAM and timing are measured by `exp11_resource_profiling.py` on our refere
 
 | Tier | GPU | CPU RAM | Disk | What it gets you |
 |---|---|---|---|---|
-| **Full reproduction** (recommended) | 1× CUDA GPU with **≥ 24 GB VRAM** (e.g. RTX 3090/4090, A10, A5000, A100, H100) | 32 GB | 40 GB | Retrain every model, reproduce all of Tab. 3/5/6/7/8 and Fig. scale/rd/qualitative/recovery |
-| **Full reproduction, tight** | 1× CUDA GPU with **≥ 16 GB VRAM** (e.g. RTX 4080, V100 16G, A4000) | 32 GB | 40 GB | Same as above, no headroom — reduce `resolution_scale` if OOM (§7) |
+| **Full reproduction** (recommended) | 1× CUDA GPU with **≥ 24 GB VRAM** (e.g. RTX 3090/4090/5090, A10, A5000, A100, H100, B200) | 32 GB | 40 GB | Retrain every model, reproduce all of Tab. 3/5/6/7/8 and Fig. scale/rd/qualitative/recovery |
+| **Full reproduction, tight** | 1× CUDA GPU with **≥ 16 GB VRAM** (e.g. RTX 4080, A4000, T4 16 GB, Quadro RTX 6000) | 32 GB | 40 GB | Same as above, no headroom — reduce `resolution_scale` if OOM (§7) |
 | **Authors' reference** | 1× RTX PRO 6000 Blackwell Max-Q, 96 GB | 256 GB | — | All absolute FPS / time numbers in the paper |
+
+**GPU generation:** CUDA 13.0 (the PyTorch cu130 runtime this artifact ships) supports **Turing (compute 7.5) through Blackwell**; `install.sh` compiles native code for Turing, Ampere, Ada, Hopper, and both datacenter (sm_100) and consumer (sm_120) Blackwell, plus PTX so newer/future GPUs JIT forward. CUDA 13.0 **dropped Volta and Pascal**, so **sm_75 (Turing) is the minimum** — a V100 / P100 / GTX 10-series cannot run the cu130 build. Reviewers on those GPUs should use the Chameleon Cloud path (§ below) or an older CUDA. Reviewers on an unusual but ≥Turing GPU can force their arch: `TORCH_CUDA_ARCH_LIST="<major.minor>" bash install.sh`.
 
 - **OS:** Linux (Ubuntu 22.04+ verified on 24.04).
 - **Multi-GPU not required.** Training runs on a single GPU; the optional `--num_gpus 2` flag parallelises the per-block training loop across two GPUs to cut wall-clock by ~1.8×.
@@ -59,7 +61,7 @@ Peak VRAM and timing are measured by `exp11_resource_profiling.py` on our refere
 All software is installed into a conda environment named `particlegs`, declared in `environment.yml`.
 
 - [conda](https://docs.conda.io) (miniforge / mambaforge recommended) ≥ 23.5
-- Host NVIDIA driver ≥ 535 (CUDA 13 runtime is pulled as PyTorch cu130 wheels)
+- Host NVIDIA driver **≥ 580** (required by the CUDA 13.0 runtime pulled as PyTorch cu130 wheels; an older driver fails at CUDA init — update the driver or use the Chameleon path). Only the *driver* comes from the host; the CUDA *toolkit* used to build the extensions is pinned inside the conda env (`environment.yml`), so the build does not depend on the host's `/usr/local/cuda`.
 - C++ toolchain + CMake + Ninja — provided by the conda env (`build-essential` equivalents)
 
 `bash install.sh` handles everything: creates the env from `environment.yml` (Python 3.12, ParaView 6.0.1, h5py, PyTorch cu130), compiles the three CUDA extensions (`diff-gaussian-rasterization`, `simple-knn`, `fused-ssim`), and builds the SZ3 / LCP baseline compressors from source. Total install time: ~15 min on a modern workstation, dominated by PyTorch wheel download and CUDA extension compilation.
