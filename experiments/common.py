@@ -270,6 +270,18 @@ def compute_ssim_dirs(gt_dir, render_dir, max_workers=8):
 
 # ── Shared data preparation ──────────────────────────────────────────────
 
+def _record_shared_timing(key, seconds):
+    """Persist a shared-prep timing so EXP-11 can report it later.
+
+    Shared data is generated once and cached, so timings must survive
+    across runs in a file rather than being re-measured.
+    """
+    path = SHARED_DIR / "timings.json"
+    data = json.loads(path.read_text()) if path.exists() else {}
+    data[key] = seconds
+    path.write_text(json.dumps(data, indent=2))
+
+
 def ensure_shared_data(gpu=0):
     """Prepare VTP, normalization.json, points3d.ply, and eval GT images.
 
@@ -286,6 +298,7 @@ def ensure_shared_data(gpu=0):
     # Phase 1: Create VTP (pvbatch required for vtk import)
     if not vtp_path.exists():
         print("\n[Shared] Creating VTP from raw data...")
+        t0 = time.perf_counter()
         run_cmd(
             pvbatch_cmd(PREPARE_SCRIPT,
                         "--raw_x", RAW_X, "--raw_y", RAW_Y, "--raw_z", RAW_Z,
@@ -293,6 +306,7 @@ def ensure_shared_data(gpu=0):
                         "--num_points_raw", "0",
                         "--skip_images"),
             log_path=logs / "create_vtp.log")
+        _record_shared_timing("vtp_conversion_s", round(time.perf_counter() - t0, 1))
     else:
         print(f"[Shared] VTP exists: {vtp_path}")
 

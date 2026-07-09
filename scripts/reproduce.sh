@@ -6,21 +6,23 @@
 # checkpoints are shipped — everything is reproduced from the raw
 # particle files.
 #
-# Wall-clock on 2× RTX PRO 6000 (Blackwell): ~10 h for the default
-# experiment set (EXP-1, 4, 6, 7, 8, 11, 13). On a single GPU, EXP-4
-# block training runs serially and the total grows to ~14 h.
+# Wall-clock on 2× RTX PRO 6000 (Blackwell): ~11 h for the default
+# experiment set (EXP-1, 4, 6, 7, 8, 11, 13, 14). On a single GPU, EXP-4
+# block training runs serially and the total grows to ~15 h. EXP-14 is
+# inference-only (~40 min) and reuses the EXP-1 trained model.
 #
 # EXP-12 (SSIM-augmented rate-distortion sweep) is NOT in the default
 # set — it adds another ~5 h of SZ3/LCP re-evaluation and only
 # supplies an optional SSIM column for Tab. 5. Pass it explicitly to
 # reproduce that column:
-#   bash scripts/reproduce.sh --exp 1,4,6,7,8,11,12,13
+#   bash scripts/reproduce.sh --exp 1,4,6,7,8,11,12,13,14
 #
-# Ablation and HACC-region generalization experiments (EXP-2, 3, 5,
-# 9, 10, hacc) are not yet wired up.
+# Ablation experiments (EXP-2, 3, 5, 9, 10) and the 1B-particle HACC
+# single-block run are out of AE scope (they support secondary/ablation
+# claims, not the paper's key results) and are not wired into this script.
 #
 # Usage:
-#   bash scripts/reproduce.sh [--gpu N] [--num_gpus N] [--exp 1,4,6,7,8,11,13]
+#   bash scripts/reproduce.sh [--gpu N] [--num_gpus N] [--exp 1,4,6,7,8,11,13,14]
 
 set -euo pipefail
 
@@ -29,7 +31,7 @@ cd "${REPO_ROOT}"
 
 GPU=0
 NUM_GPUS=2
-EXP="1,4,6,7,8,11,13"
+EXP="1,4,6,7,8,11,13,14"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --gpu) GPU="$2"; shift 2 ;;

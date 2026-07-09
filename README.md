@@ -80,17 +80,20 @@ Both required datasets are downloaded automatically by `scripts/reproduce.sh` in
 
 ---
 
-## 6. Reproducing the paper (~10 h on 2 GPUs, ~14 h on 1 GPU)
+## 6. Reproducing the paper (~11 h on 2 GPUs, ~15 h on 1 GPU)
 
 Runs the full pipeline end-to-end: downloads raw HACC + FIRE-2 data,
 retrains every model, and emits numeric results for Tab. 3 / 5 / 6 / 7 / 8
 and Fig. scale / rd / qualitative / three_way / recovery, plus the FIRE-2
-cross-dataset generalization row. No pre-trained checkpoints are shipped —
-everything is reproduced from the raw particle files.
+cross-dataset generalization row and the pose/viz-param generalization
+subsection. No pre-trained checkpoints are shipped — everything is
+reproduced from the raw particle files.
 
-**Default experiment set:** EXP-1/4/6/7/8/11/13. EXP-12 (optional
+**Default experiment set:** EXP-1/4/6/7/8/11/13/14. EXP-14
+(generalization to unseen camera poses + out-of-range viz params) is
+inference-only (~40 min) and reuses the EXP-1 model. EXP-12 (optional
 SSIM column for Tab. 5) is off by default — it adds ~5 h of SZ3/LCP
-re-evaluation; request it explicitly with `--exp 1,4,6,7,8,11,12,13`.
+re-evaluation; request it explicitly with `--exp 1,4,6,7,8,11,12,13,14`.
 
 ### 6.1 Install the environment
 
@@ -114,12 +117,13 @@ The wrapper will:
 
 1. Download `data/hacc_raw/{xx,yy,zz}.f32` from SDRbench (280 M particles, ~5.5 GB tarball) if not already present.
 2. Download `data/fire2_raw/{xx,yy,zz}.f32` from the FIRE-2 Public Release (L172 DM-only, snapshot 010, ~4.6 GB HDF5 → extracted to 3.2 GB f32) if not already present.
-3. Call `experiments.run_all --exp 1,4,6,7,8,11,13` (the default set), which in turn:
-   - Runs `ensure_shared_data()` once (generates `particles.vtp`, `normalization.json`, `points3d.ply`, and 3-orbit eval GT images via ParaView).
+3. Call `experiments.run_all --exp 1,4,6,7,8,11,13,14` (the default set), which in turn:
+   - Runs `ensure_shared_data()` once (generates `particles.vtp`, `normalization.json`, `points3d.ply`, and 3-orbit eval GT images via ParaView; times the raw→VTP conversion into `runs/shared/timings.json`).
    - Trains the E25 single-block model (3 stages, 39 k iterations).
-   - Trains the block-scan (2- and 4-block configurations with per-block training + merge + finetune; reviewer subset of the paper's 2/4/8/16 Tab. 3 scan, chosen to keep the default run within ~10 h).
+   - Trains the block-scan (2- and 4-block configurations with per-block training + merge + finetune; reviewer subset of the paper's 2/4/8/16 Tab. 3 scan, chosen to keep the default run within ~11 h).
    - Runs SZ3 / LCP sweeps, render benchmark, recovery methods, three-way comparison, and resource profiling. (Optional SSIM augmentation via EXP-12 is off by default.)
    - EXP-13: retrains E25 on FIRE-2 raw data with domain-scaled viz params (cross-dataset generalization).
+   - EXP-14: reuses the EXP-1 model (inference-only) to measure graceful degradation on unseen camera poses and out-of-range radius/opacity factors.
 4. Calls `scripts/aggregate_results.py`, writing `runs/summary/{tables.md, summary.json, fig_scale.json}`.
 
 Partial runs are supported via `--exp <subset>` (e.g. `--exp 6,11` to re-run only the benchmarks).
@@ -161,26 +165,48 @@ from non-deterministic CUDA ops. These should match on any GPU.
 
 | Quantity | Expected | Tolerance | Paper ref |
 |---|---|---|---|
+| ParticleGS (E25) masked PSNR | 26.28 dB | ± 0.3 dB | Tab. 5 / rd fig |
+| ParticleGS (E25) compression ratio | 290× | ± 3 % | Tab. 5 / rd fig |
+| SZ3 masked PSNR at matched CR (~233×) | 18.78 dB | ± 0.1 dB | rd fig |
+| SZ3 compression ratio (nearest point) | 233.46× | ± 1 % | rd fig |
+| LCP masked PSNR at matched CR (~240×) | 15.22 dB | ± 0.1 dB | rd fig |
 | 2-block finetuned masked PSNR | 27.30 dB | ± 0.3 dB | Tab. 3 |
 | 2-block finetuned # Gaussians | 564 062 | ± 3 % | Tab. 3 |
 | 2-block finetuned size | 36.6 MB | ± 3 % | Tab. 3 |
 | 4-block finetuned masked PSNR | 27.50 dB | ± 0.3 dB | Tab. 3 |
 | 4-block finetuned # Gaussians | 605 702 | ± 3 % | Tab. 3 |
 | 4-block finetuned size | 39.3 MB | ± 3 % | Tab. 3 |
+| Recovery density correlation (V0 baseline) | 0.893 | ± 0.02 | recovery |
+| Three-way recovered-render masked PSNR (far) | 19.41 dB | ± 0.3 dB | three-way |
+| Generalization masked PSNR (1.3× extrap orbit) | 26.20 dB | ± 0.3 dB | gen. subsec |
+| Generalization masked PSNR (in-range anchor) | 26.00 dB | ± 0.3 dB | gen. subsec |
+| Generalization SSIM (in-range anchor) | 0.768 | ± 0.03 | gen. subsec |
 | FIRE-2 masked PSNR | 25.05 dB | ± 0.3 dB | generalization row |
 | FIRE-2 # Gaussians | 81 055 | ± 3 % | generalization row |
 | FIRE-2 size | 5.3 MB | ± 3 % | generalization row |
 | FIRE-2 compression ratio | 584× | ± 3 % | generalization row |
 | 3DGS compression ratio (HACC) | 85.8× | ± 3 % | Tab. 6 |
 
+The SZ3 and LCP rate-distortion points are the deterministic baselines'
+values at the point nearest ParticleGS's compression ratio; the tight
+tolerance reflects that these compressors are not stochastic. Together
+with the ParticleGS row they enforce the paper's headline claim:
+**at a matched ~230–290× compression ratio, ParticleGS leads SZ3 by
+> 7 dB and LCP by > 11 dB in masked PSNR.**
+
 #### Trend (scored, must pass)
 
-| Claim | Expected | Paper ref |
-|---|---|---|
-| 3DGS FPS / ParaView FPS | > 100× | Tab. 6 speedup |
+| Claim | Expected | Threshold | Paper ref |
+|---|---|---|---|
+| 3DGS FPS / ParaView FPS | 2525× | > 100× | Tab. 6 speedup |
+| Recovery density correlation (4-block) | 0.923 | > 0.9 | recovery |
+| Generalization masked PSNR (2.5× out-of-range radius) | 20.67 dB | > 18 dB | gen. subsec |
 
-Our reference ratio is 2525×; the threshold is set conservatively so any
-modern GPU passes.
+The trend thresholds are set conservatively so any modern GPU / stochastic
+training run passes while still enforcing the qualitative claim (3DGS is
+orders of magnitude faster than ParaView; recovered density stays
+well-correlated; quality degrades gracefully outside the trained factor
+range rather than collapsing).
 
 #### Hardware-dependent (reported only, not scored)
 
@@ -192,6 +218,12 @@ Absolute values are GPU-specific and not required to match.
 | ParaView FPS @ 1920×1080 (280M particles) | 0.32 FPS |
 | Training peak GPU memory | 10.5 GB |
 | Finetune wall time (60 k iter) | 14.4 min |
+| Raw→VTP conversion (280M particles) | 6.85 min |
+
+The raw→VTP conversion time is measured once, when `ensure_shared_data()`
+first builds `particles.vtp`, and cached in `runs/shared/timings.json`
+(it backs the Tab. 7 preprocessing row). On a rerun where the VTP already
+exists it is read back from that file, not re-measured.
 
 Full numerical tables appear in `runs/summary/tables.md`.
 

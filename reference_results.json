@@ -147,6 +147,116 @@
       "unit": "min",
       "reference_gpu": "RTX PRO 6000 Blackwell",
       "note": "Measured on the reviewer's first EXP-11 run; reruns show MISSING because the finetuned checkpoint cache hit is detected and the timing is skipped."
+    },
+    {
+      "path": "exp11.vtp_conversion.vtp_conversion_min",
+      "expected": 6.85,
+      "class": "hw_dependent",
+      "unit": "min",
+      "reference_gpu": "RTX PRO 6000 Blackwell workstation (NVMe)",
+      "paper_ref": "Tab. 7 (raw -> VTP conversion, 280M particles)",
+      "note": "Timed once when shared data is first generated. Shows MISSING if runs/shared/ was created by an artifact version without timing support; delete runs/shared/particles.vtp and rerun to measure."
+    },
+
+    {
+      "path": "exp1.exp1b_e25.avg_masked_psnr",
+      "expected": 26.28,
+      "class": "hw_independent",
+      "tolerance_abs": 0.3,
+      "unit": "dB",
+      "paper_ref": "Tab. 5 / rate-distortion figure (ParticleGS E25 single block)"
+    },
+    {
+      "path": "exp1.exp1b_e25.cr",
+      "expected": 290.0,
+      "class": "hw_independent",
+      "tolerance_rel": 0.03,
+      "paper_ref": "Tab. 5 / rate-distortion figure (ParticleGS E25 single block)"
+    },
+    {
+      "path": "exp1.exp1a_sz3.13.avg_masked_psnr",
+      "expected": 18.78,
+      "class": "hw_independent",
+      "tolerance_abs": 0.1,
+      "unit": "dB",
+      "paper_ref": "Rate-distortion figure (SZ3 point nearest ParticleGS CR)",
+      "note": "SZ3 is deterministic, hence the tight tolerance. Together with exp1b_e25.avg_masked_psnr this enforces the paper's headline claim: ParticleGS leads SZ3 by >7 dB masked PSNR at matched compression ratio (~290x vs ~233x)."
+    },
+    {
+      "path": "exp1.exp1a_sz3.13.cr",
+      "expected": 233.46,
+      "class": "hw_independent",
+      "tolerance_rel": 0.01,
+      "paper_ref": "Rate-distortion figure (SZ3 point nearest ParticleGS CR)"
+    },
+    {
+      "path": "exp1.exp1c_lcp.8.avg_masked_psnr",
+      "expected": 15.22,
+      "class": "hw_independent",
+      "tolerance_abs": 0.1,
+      "unit": "dB",
+      "paper_ref": "Rate-distortion figure (LCP point nearest ParticleGS CR, ~240x)",
+      "note": "LCP is deterministic, hence the tight tolerance."
+    },
+
+    {
+      "path": "exp7.7a.0.density_field.correlation",
+      "expected": 0.893,
+      "class": "hw_independent",
+      "tolerance_abs": 0.02,
+      "paper_ref": "Approximate Particle Recovery (V0 baseline, single block)"
+    },
+    {
+      "path": "exp7.7b.2.density_field.correlation",
+      "expected": 0.923,
+      "class": "trend",
+      "trend_rule": "gt",
+      "trend_threshold": 0.9,
+      "paper_ref": "Approximate Particle Recovery (4-block recovery)",
+      "note": "Camera-ready claims density-field correlation >0.92 for 4-block recovery; the enforced trend uses 0.9 to absorb training stochasticity."
+    },
+
+    {
+      "path": "exp8.recovered_eval.eval_far.masked_psnr",
+      "expected": 19.41,
+      "class": "hw_independent",
+      "tolerance_abs": 0.3,
+      "unit": "dB",
+      "paper_ref": "Three-way comparison (render of recovered particles, far orbit)"
+    },
+
+    {
+      "path": "exp14.axis_a_pose.0.masked_psnr",
+      "expected": 26.20,
+      "class": "hw_independent",
+      "tolerance_abs": 0.3,
+      "unit": "dB",
+      "paper_ref": "Generalization subsection (camera extrapolation, 1.3x orbit)"
+    },
+    {
+      "path": "exp14.axis_b_viz.radius.2.masked_psnr",
+      "expected": 26.00,
+      "class": "hw_independent",
+      "tolerance_abs": 0.3,
+      "unit": "dB",
+      "paper_ref": "Generalization subsection (in-range anchor, radius factor 1.0 at 0.7x orbit)"
+    },
+    {
+      "path": "exp14.axis_b_viz.radius.2.ssim",
+      "expected": 0.768,
+      "class": "hw_independent",
+      "tolerance_abs": 0.03,
+      "paper_ref": "Generalization subsection (SSIM at in-range anchor)"
+    },
+    {
+      "path": "exp14.axis_b_viz.radius.5.masked_psnr",
+      "expected": 20.67,
+      "class": "trend",
+      "trend_rule": "gt",
+      "trend_threshold": 18.0,
+      "unit": "dB",
+      "paper_ref": "Generalization subsection (out-of-range radius factor 2.5)",
+      "note": "Paper claim is graceful degradation outside the trained factor range [0.25, 1.75], not an exact value; enforced as masked PSNR staying above 18 dB."
     }
   ]
 }

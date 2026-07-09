@@ -39,13 +39,18 @@ def get_nested(d, path):
     """Look up a dotted path like 'exp4.blocks_2.finetuned.masked_psnr'.
 
     The first segment selects which results.json to load (handled by caller);
-    this helper walks the remaining segments within a single dict.
+    this helper walks the remaining segments within a single dict. An
+    all-digit segment indexes into a list (e.g. 'exp1.exp1a_sz3.13.cr' is
+    the 14th SZ3 rate-distortion point — point order is fixed by the
+    experiment's error-bound sweep, so indices are stable across runs).
     Returns None if any segment is missing.
     """
     cur = d
     for part in path.split("."):
         if isinstance(cur, dict) and part in cur:
             cur = cur[part]
+        elif isinstance(cur, list) and part.isdigit() and int(part) < len(cur):
+            cur = cur[int(part)]
         else:
             return None
     return cur

@@ -20,6 +20,7 @@ Experiment dependency graph:
     EXP-8 (3-way comparison) ──┤─ needs trained model
     EXP-9 (end-to-end)         │  independent (re-trains from scratch)
     EXP-10 (efficiency)        │  independent (re-trains from scratch)
+    EXP-14 (generalization) ───┴─ needs EXP-1 trained model (inference-only)
 """
 
 import argparse
@@ -44,6 +45,7 @@ ALL_EXPERIMENTS = {
     11: ("exp11_resource_profiling", "Resource Profiling (data loading, merge time)"),
     12: ("exp12_add_ssim", "SSIM Column for Rate-Distortion Table"),
     13: ("exp_fire2_generalization", "FIRE-2 Cross-Dataset Generalization"),
+    14: ("exp14_generalization", "Pose + Viz-Param Generalization (needs EXP-1)"),
 }
 
 # Experiments that manage their own shared data (not covered by the HACC
