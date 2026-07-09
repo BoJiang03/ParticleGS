@@ -41,10 +41,37 @@ fi
 # ── 2. CUDA extensions ──────────────────────────────────────────────────────
 # --no-build-isolation is required because each setup.py does `import torch`
 # at build time, which pip's default isolated build env cannot see.
+#
+# Build against the conda-pinned CUDA 13.0 toolchain (environment.yml), NOT the
+# host's /usr/local/cuda. On machines whose system CUDA is 13.1, nvcc 13.1
+# miscompiles the Blackwell (sm_120) rasterizer kernel and every training run
+# crashes at iteration 0 with a garbage multi-TiB allocation. Pointing CUDA_HOME
+# at $CONDA_PREFIX makes the build reproducible and host-CUDA-independent.
+#
+# TORCH_CUDA_ARCH_LIST embeds native SASS for Turing→Blackwell plus Blackwell
+# PTX, so the extensions run natively on reviewers' GPUs (any of Turing, Ampere,
+# Ada, Hopper, Blackwell) and JIT forward to newer cards. (Note: torch drops
+# this list if the build path contains the substring "arch"; correctness is
+# unaffected because nvcc still emits sm_75 PTX that JITs forward, but a clean
+# path additionally gives native SASS.)
+if [ "$SKIP_ENV" = false ] || [ -n "${CONDA_PREFIX}" ]; then
+    export CUDA_HOME="${CONDA_PREFIX}"
+    export PATH="${CUDA_HOME}/bin:${PATH}"
+fi
+export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-7.5;8.0;8.6;8.9;9.0;12.0+PTX}"
 echo "[2/4] Building CUDA extensions (diff-gaussian-rasterization, simple-knn, fused-ssim)..."
+echo "      CUDA_HOME=${CUDA_HOME}"
+echo "      nvcc: $(command -v nvcc || echo 'NOT FOUND') ($(nvcc --version 2>/dev/null | grep -oE 'release [0-9.]+' || echo '?'))"
+echo "      TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST}"
 pip install --no-build-isolation submodules/diff-gaussian-rasterization
 pip install --no-build-isolation submodules/simple-knn
 pip install --no-build-isolation submodules/fused-ssim
+
+# Sanity-check the rasterizer build on this GPU before anyone invests hours in a
+# reproduction. A bad nvcc/GPU-arch combination produces a binary that reads
+# uninitialized memory and crashes at first use; catch it here, loudly.
+echo "      Verifying the CUDA rasterizer loads and renders on this GPU..."
+python "${SCRIPT_DIR}/scripts/check_rasterizer.py"
 
 # ── 3. ParticleGS package ───────────────────────────────────────────────────
 echo "[3/4] Installing particlegs package (editable)..."

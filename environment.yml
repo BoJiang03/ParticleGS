@@ -11,6 +11,22 @@ dependencies:
   - git
   - curl
   - pip
+  # Pinned CUDA 13.0 build toolchain — MUST match the torch cu130 wheels below.
+  # Without this the three CUDA extensions build against the host's
+  # /usr/local/cuda, which on some machines is 13.1. nvcc 13.1 miscompiles the
+  # rasterizer for Blackwell (sm_120): it reads uninitialized memory and asks
+  # for a garbage multi-TiB allocation on the first forward pass, crashing all
+  # training at iteration 0. Pinning nvcc 13.0.88 (the CUDA 13.0 release that
+  # matches torch 2.10+cu130) fixes it and makes the build independent of the
+  # host's system CUDA. cuda-version=13.0 keeps this compatible with paraview's
+  # viskores (a cuda13.0 build). install.sh points CUDA_HOME at $CONDA_PREFIX so
+  # these — not the system toolkit — are used.
+  - cuda-version=13.0
+  - cuda-nvcc=13.0.88
+  - cuda-cudart-dev=13.0
+  - cuda-cccl=13.0
+  - cuda-crt=13.0
+  - cuda-nvvm=13.0
   - pip:
       - --extra-index-url https://download.pytorch.org/whl/cu130
       - torch==2.10.0
