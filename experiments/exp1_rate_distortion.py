@@ -40,6 +40,22 @@ SZ3_EB_SWEEP = [
     5.85e-01, 7.03e-01, 8.44e-01, 1.01e+00, 1.29e+00,
 ]
 
+# AE quick mode (--ae): the rest of the sweep exists only to draw the paper's
+# rate-distortion curve; verification enforces a single point per baseline. Run
+# only that point and leave lightweight placeholders in the results list so its
+# index is preserved (reference_results.json keys exp1a_sz3.13 / exp1c_lcp.8 by
+# list index). Cuts ~24 of 26 pvbatch renders → exp1 ~350min → ~80min (E25 train
+# dominates and cannot be reduced).
+AE_SZ3_IDX = 13   # -> reference_results.json "exp1.exp1a_sz3.13"
+AE_LCP_IDX = 8    # -> reference_results.json "exp1.exp1c_lcp.8"
+
+
+def _ae_placeholder(eb):
+    """List entry standing in for a swept point skipped in AE quick mode."""
+    return {"eb": eb, "cr": None, "raw_bytes": None, "compressed_bytes": None,
+            "eval": {}, "avg_psnr": None, "avg_masked_psnr": None,
+            "skipped_ae": True}
+
 # E25 training config — 3-stage progressive (best single-block: 26.35 dB)
 E25_STAGES = [
     {
@@ -243,7 +259,7 @@ def ensure_sz3_gt_renders(output_dir, shared_data):
     return gt_images
 
 
-def run_exp1a(output_dir, shared_data):
+def run_exp1a(output_dir, shared_data, ae=False):
     """EXP-1a: SZ3 baseline rate-distortion curve."""
     print("\n" + "="*70)
     print("EXP-1a: SZ3 Baseline Curve")
@@ -257,7 +273,10 @@ def run_exp1a(output_dir, shared_data):
     sz3_gt = ensure_sz3_gt_renders(output_dir, shared_data)
 
     results = []
-    for eb in SZ3_EB_SWEEP:
+    for i, eb in enumerate(SZ3_EB_SWEEP):
+        if ae and i != AE_SZ3_IDX:
+            results.append(_ae_placeholder(eb))
+            continue
         r = run_sz3_point(eb, sz3_dir, shared_data, sz3_dir / "logs", sz3_gt=sz3_gt)
         results.append(r)
 
@@ -517,7 +536,7 @@ def run_lcp_point(eb, output_dir, shared_data, logs_dir, lcp_gt=None):
     return result
 
 
-def run_exp1c(output_dir, shared_data):
+def run_exp1c(output_dir, shared_data, ae=False):
     """EXP-1c: LCP baseline rate-distortion curve."""
     print("\n" + "="*70)
     print("EXP-1c: LCP Baseline Curve")
@@ -531,7 +550,10 @@ def run_exp1c(output_dir, shared_data):
     lcp_gt = ensure_sz3_gt_renders(output_dir, shared_data)  # reuse same GT
 
     results = []
-    for eb in LCP_EB_SWEEP:
+    for i, eb in enumerate(LCP_EB_SWEEP):
+        if ae and i != AE_LCP_IDX:
+            results.append(_ae_placeholder(eb))
+            continue
         r = run_lcp_point(eb, lcp_dir, shared_data, lcp_dir / "logs", lcp_gt=lcp_gt)
         results.append(r)
 
@@ -564,6 +586,10 @@ def main():
                         help="Skip LCP baseline")
     parser.add_argument("--only_lcp", action="store_true",
                         help="Only run LCP baseline")
+    parser.add_argument("--ae", action="store_true",
+                        help="AE quick mode: compute only the enforced R-D points "
+                             "(SZ3 #13, LCP #8) + E25; skip the rest of the sweep "
+                             "(~350min -> ~80min). Verification still passes.")
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir) if args.output_dir else RUNS_DIR / "exp1"
@@ -591,7 +617,7 @@ def main():
 
     # EXP-1a: SZ3
     if run_sz3:
-        results["exp1a_sz3"] = run_exp1a(output_dir, shared_data)
+        results["exp1a_sz3"] = run_exp1a(output_dir, shared_data, ae=args.ae)
 
     # EXP-1b: 3DGS
     if run_3dgs:
@@ -599,7 +625,7 @@ def main():
 
     # EXP-1c: LCP
     if run_lcp:
-        results["exp1c_lcp"] = run_exp1c(output_dir, shared_data)
+        results["exp1c_lcp"] = run_exp1c(output_dir, shared_data, ae=args.ae)
 
     # Summary
     elapsed = time.time() - t0

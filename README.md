@@ -130,6 +130,41 @@ The wrapper will:
 
 Partial runs are supported via `--exp <subset>` (e.g. `--exp 6,11` to re-run only the benchmarks).
 
+### 6.2a AE fast path (~5 h on 4 GPUs, fits the 8 h reviewer budget)
+
+If you are on a **multi-GPU node** (the recommended AE setup is a 4× A100 /
+RTX-class node, e.g. a Chameleon `gpu_rtx6000` or A100 lease) and want to stay
+inside the SC AE ~8 h budget, use the AE wrapper instead of `reproduce.sh`:
+
+```bash
+bash scripts/reproduce_ae.sh --num_gpus 4
+```
+
+It reproduces the **same 26 enforced metrics** (all of EXP-1/4/6/7/8/11/13/14)
+and then runs `verify_results.py`, but is scheduled for the budget:
+
+- **EXP-1 quick mode** — only the enforced rate-distortion points (SZ3 #13,
+  LCP #8, E25) are computed; the remaining 15+11 SZ3/LCP sweep points, which
+  exist only to draw the R-D *curve*, are skipped. EXP-1 drops ~350 → ~80 min.
+  (The verified numbers are identical; the curve figure is the only thing not
+  redrawn. Use `scripts/reproduce.sh` for the full sweep.)
+- **Parallel scheduling** — EXP-4 (block training) and EXP-1 overlap on disjoint
+  GPU sets, then EXP-6/7/8/11/13/14 are pooled across all GPUs. Per-experiment
+  logs land in `runs/ae_logs/`.
+
+Estimated wall-clock: **~5 h on 4 GPUs, ~8 h on 2 GPUs.** Needs ≥ 2 GPUs; on a
+single GPU use `scripts/reproduce.sh`. Add `--sequential` to disable parallel
+scheduling.
+
+**Eval-only fallback (~1–2 h, no training).** If you cannot retrain within
+budget, verify the reported numbers by re-rendering from the shipped model
+bundle (published on the `sc26-final` release / Zenodo DOI, ~200 MB):
+
+```bash
+bash scripts/fetch_checkpoints.sh          # downloads checkpoints.tar.gz -> runs/
+bash scripts/reproduce_ae.sh --eval-only
+```
+
 ### 6.3 Manual low-level commands (optional)
 
 If you want to invoke a single stage without the wrapper:
