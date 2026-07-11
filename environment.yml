@@ -18,9 +18,10 @@ dependencies:
   # for a garbage multi-TiB allocation on the first forward pass, crashing all
   # training at iteration 0. Pinning nvcc 13.0.88 (the CUDA 13.0 release that
   # matches torch 2.10+cu130) fixes it and makes the build independent of the
-  # host's system CUDA. cuda-version=13.0 keeps this compatible with paraview's
-  # viskores (a cuda13.0 build). install.sh points CUDA_HOME at $CONDA_PREFIX so
-  # these — not the system toolkit — are used.
+  # host's system CUDA. install.sh points CUDA_HOME at $CONDA_PREFIX so these —
+  # not the system toolkit — are used. (paraview renders via EGL/mesa and has no
+  # cuda-version dependency, so it is unaffected by this pin — see
+  # environment_ae_cu126.yml for the CUDA-12.6 variant used on older drivers.)
   - cuda-version=13.0
   - cuda-nvcc=13.0.88
   - cuda-cudart-dev=13.0

@@ -1,0 +1,43 @@
+name: particlegs
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.12
+  # paraview renders the ground-truth particle images via EGL/mesa — it has NO
+  # cuda-version dependency, so the exact same build works under either the
+  # CUDA 12.6 or the CUDA 13.0 toolchain. (Same pinned build as environment.yml.)
+  - paraview=6.0.1=py312h1907c67_5
+  - h5py
+  - cmake
+  - ninja
+  - git
+  - curl
+  - pip
+  # CUDA 12.6 build toolchain — for reviewer nodes whose driver tops out at
+  # CUDA 12.x (e.g. Chameleon 4x A100 on driver 560.35.05 = CUDA 12.6). The
+  # default environment.yml pins CUDA 13.0 / torch cu130, which REQUIRES an
+  # R580+ driver and will fail to initialize CUDA on a 12.x driver ("driver
+  # version is insufficient for CUDA runtime version"). A100 is sm_80, fully
+  # supported since CUDA 11, so nothing here needs the 13.0 toolchain — the
+  # 13.0 pin only ever mattered for a local Blackwell (sm_120) card whose
+  # system nvcc 13.1 miscompiled the rasterizer. scripts/bootstrap_ae.sh selects
+  # this file automatically when the driver's max CUDA is < 13.0. install.sh
+  # points CUDA_HOME at $CONDA_PREFIX so these — not the host toolkit — are used.
+  - cuda-version=12.6
+  - cuda-nvcc=12.6
+  - cuda-cudart-dev=12.6
+  - cuda-cccl=12.6
+  - cuda-crt=12.6
+  - cuda-nvvm=12.6
+  - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu126
+      - torch==2.10.0
+      - torchvision==0.25.0
+      - numpy
+      - plyfile
+      - tqdm
+      - Pillow
+      - opencv-python
+      - scipy
+      - scikit-image

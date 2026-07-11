@@ -60,8 +60,8 @@ Peak VRAM and timing are measured by `exp11_resource_profiling.py` on our refere
 
 All software is installed into a conda environment named `particlegs`, declared in `environment.yml`.
 
-- [conda](https://docs.conda.io) (miniforge / mambaforge recommended) ≥ 23.5
-- Host NVIDIA driver **≥ 580** (required by the CUDA 13.0 runtime pulled as PyTorch cu130 wheels; an older driver fails at CUDA init — update the driver or use the Chameleon path). Only the *driver* comes from the host; the CUDA *toolkit* used to build the extensions is pinned inside the conda env (`environment.yml`), so the build does not depend on the host's `/usr/local/cuda`.
+- [conda](https://docs.conda.io) (miniforge / mambaforge recommended) ≥ 23.5 — **or nothing at all**: the AE wrapper `scripts/reproduce_ae.sh` installs Miniforge for you if `conda` is not on `PATH` (see §6.2a).
+- NVIDIA driver supporting **CUDA ≥ 12.4**. The default `environment.yml` pins the CUDA 13.0 / PyTorch cu130 stack, which needs driver **≥ 580**; on a node whose driver tops out at CUDA 12.x (e.g. Chameleon 4× A100 on driver 560.35.05 = CUDA 12.6), the AE wrapper auto-selects a CUDA 12.6 / torch cu126 env (`environment_ae_cu126.yml`) instead — no manual step. Only the *driver* comes from the host; the CUDA *toolkit* used to build the extensions is pinned inside the conda env, so the build never depends on the host's `/usr/local/cuda`.
 - C++ toolchain + CMake + Ninja — provided by the conda env (`build-essential` equivalents)
 
 `bash install.sh` handles everything: creates the env from `environment.yml` (Python 3.12, ParaView 6.0.1, h5py, PyTorch cu130), compiles the three CUDA extensions (`diff-gaussian-rasterization`, `simple-knn`, `fused-ssim`), and builds the SZ3 / LCP baseline compressors from source. Total install time: ~15 min on a modern workstation, dominated by PyTorch wheel download and CUDA extension compilation.
@@ -132,13 +132,31 @@ Partial runs are supported via `--exp <subset>` (e.g. `--exp 6,11` to re-run onl
 
 ### 6.2a AE fast path (~5 h on 4 GPUs, fits the 8 h reviewer budget)
 
-If you are on a **multi-GPU node** (the recommended AE setup is a 4× A100 /
-RTX-class node, e.g. a Chameleon `gpu_rtx6000` or A100 lease) and want to stay
-inside the SC AE ~8 h budget, use the AE wrapper instead of `reproduce.sh`:
+If you are on a **multi-GPU node** (the recommended AE setup is a 4× A100 node,
+e.g. a Chameleon `gpu_a100_pcie`/`gpu_a100_nvlink` lease) and want to stay inside
+the SC AE ~8 h budget, use the AE wrapper instead of `reproduce.sh`:
 
 ```bash
+# From a fresh clone on a bare node — no conda, no env needed first:
 bash scripts/reproduce_ae.sh --num_gpus 4
 ```
+
+This is a **single command on a bare node**. Before running the experiments it
+calls `scripts/bootstrap_ae.sh`, which:
+
+- installs **Miniforge** into `$HOME/miniforge3` if `conda` is not already on
+  `PATH` (override the location with `PARTICLEGS_CONDA=/path`);
+- reads the driver's max CUDA version from `nvidia-smi` and creates the
+  `particlegs` env from the **matching** spec — `environment.yml` (cu130) on a
+  driver ≥ CUDA 13.0, or `environment_ae_cu126.yml` (cu126) on a CUDA-12.x
+  driver such as the 4× A100 node (driver 560.35.05). A100 is `sm_80`, natively
+  supported by both toolchains; the build is self-checked by
+  `scripts/check_rasterizer.py` before any training starts;
+- builds the three CUDA extensions + SZ3/LCP.
+
+If you have already built and activated the env yourself, skip that step with
+`--no-setup`. To build the env without running experiments, run
+`bash scripts/bootstrap_ae.sh` on its own.
 
 It reproduces the **same 26 enforced metrics** (all of EXP-1/4/6/7/8/11/13/14)
 and then runs `verify_results.py`, but is scheduled for the budget:
