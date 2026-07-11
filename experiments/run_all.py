@@ -426,9 +426,11 @@ def run_ae_parallel(exp_nums, num_gpus, ae_quick, logdir):
 
     # ---- Segment 1: EXP-1 isolated ----
     if 1 in exp_set:
-        print(f"\n{'='*70}\n=== AE Segment 1/3 (isolated): EXP-1 solo — clean "
-              f"end-to-end train time + E25 model ===\n{'='*70}")
-        job = _spawn(1, gpus[0], (["--ae"] if ae_quick else []), True,
+        print(f"\n{'='*70}\n=== AE Segment 1/3 (isolated): EXP-1 solo — "
+              f"{'shipped E25 -> eval + SZ3 iso-CR' if ae_quick else 'end-to-end train time + E25 model'} "
+              f"===\n{'='*70}")
+        job = _spawn(1, gpus[0],
+                     (["--ae", "--use_pretrained_e25"] if ae_quick else []), True,
                      logdir / "exp1.log", env=full_env)
         _reap(job, results)
         if not results.get(1, False):
@@ -519,6 +521,8 @@ def main():
             # no-op where unused). Full reproduce.sh leaves args.ae False -> extra
             # stays empty here and EXP-4 keeps blocks "2,4" with no pretrained.
             extra = ["--ae"] if args.ae else []
+            if num == 1 and args.ae:
+                extra.append("--use_pretrained_e25")  # ship E25 -> eval-only
             if num == 4:
                 blocks = "4" if args.ae else "2,4"
                 extra += ["--num_gpus", str(args.num_gpus), "--blocks", blocks]

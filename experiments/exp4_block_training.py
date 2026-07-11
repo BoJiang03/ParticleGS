@@ -25,8 +25,9 @@ from experiments.common import *
 # ── AE ship-4-blocks fast path ──────────────────────────────────────────────
 # The AE artifact ships the N trained sub-block models so the reviewer does NOT
 # re-run the N per-block end-to-end trainings (each = a full 4K/6K GT render +
-# 39k-iter train). This is the 1+4+1 → 1+1 reduction: only E25 (EXP-1) and the
-# merged-model finetune train live; the sub-blocks are provided pre-trained.
+# 39k-iter train). Combined with the shipped E25 model (EXP-1, pretrained/e25/),
+# the AE trains only ONE model live: this merged-model 60k finetune (~17 min).
+# The sub-blocks and E25 are provided pre-trained; all GT is still rendered live.
 #
 # Upload layout (self-contained, only what merge_blocks() needs), per block i:
 #     pretrained/blocks_<N>/block_<ii>/

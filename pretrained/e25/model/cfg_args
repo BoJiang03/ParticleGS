@@ -1,0 +1,1 @@
+Namespace(sh_degree=0, source_path='/data1/work/bojiang/archive_projects/adae-fresh-20260711/runs/exp1/e25/02_S3_mix_6k/data', model_path='/data1/work/bojiang/archive_projects/adae-fresh-20260711/runs/exp1/e25/02_S3_mix_6k/model', images='images', depths='', resolution=1, white_background=False, train_test_exp=False, data_device='cpu', eval=False)

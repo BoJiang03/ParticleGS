@@ -305,6 +305,53 @@ def run_exp1a(output_dir, shared_data, ae=False):
 
 # ── EXP-1b: 3DGS E25 ─────────────────────────────────────────────────────
 
+# ── AE ship-E25 fast path ───────────────────────────────────────────────────
+# E25 single-block training (3-stage, 39k iters + 4K/6K GT rendering) is the AE
+# budget's single biggest cost (~1.5 h on a graphics GPU, hours on a render-
+# bound A100). The artifact ships the trained E25 model so --ae evals it instead
+# of training it live. EXP-7/EXP-14 locate the model via
+# find_checkpoint(runs/exp1/e25/<final>/model), so the shipped bundle includes
+# the full chkpnt and is unpacked into that exact path — the reviewer's runs/
+# layout is identical to a live E25 run, only faster.
+#
+# Upload layout (self-contained): pretrained/e25/model/ = the trained final-stage
+#   model dir (chkpnt<it>.pth, viz_mapper_<it>.pth,
+#   point_cloud/iteration_<it>/point_cloud.ply, cfg_args, cameras/exposure json).
+#
+# Full scripts/reproduce.sh passes neither --ae nor --use_pretrained_e25, so
+# _find_pretrained_e25() is never consulted and E25 trains live exactly as before.
+PRETRAINED_DIR = PARTICLEGS_ROOT / "pretrained"
+E25_FINAL_STAGE = "02_S3_mix_6k"   # final E25 stage dir; where EXP-7/14 look too
+
+
+def _find_pretrained_e25():
+    """Return (src_model_dir, iteration) for the shipped E25 under pretrained/e25/,
+    or None if absent/incomplete (→ caller trains E25 live)."""
+    model_dir = PRETRAINED_DIR / "e25" / "model"
+    pc = model_dir / "point_cloud"
+    iters = sorted(pc.glob("iteration_*"),
+                   key=lambda p: int(p.name.split("_")[1])) if pc.is_dir() else []
+    if not iters:
+        return None
+    it = int(iters[-1].name.split("_")[1])
+    if not ((model_dir / f"chkpnt{it}.pth").exists()
+            and (model_dir / f"viz_mapper_{it}.pth").exists()):
+        print(f"  [pretrained] {model_dir} incomplete — training E25 live")
+        return None
+    return model_dir, it
+
+
+def _stage_pretrained_e25(src_model, iteration, output_dir):
+    """Unpack the shipped E25 into runs/exp1/e25/<final>/model so EXP-1 eval AND
+    the downstream EXP-7/14 (find_checkpoint that path) behave exactly as after a
+    live E25 training. Idempotent. Returns the staged model dir."""
+    dst_model = output_dir / "e25" / E25_FINAL_STAGE / "model"
+    if find_checkpoint(dst_model, iteration) is None:
+        dst_model.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(src_model, dst_model, dirs_exist_ok=True)
+    return dst_model
+
+
 def run_e25_training(output_dir, shared_data, gpu=0):
     """Train E25 3-stage progressive single-block model."""
     e25_dir = output_dir / "e25"
@@ -372,19 +419,33 @@ def run_e25_training(output_dir, shared_data, gpu=0):
     return final_model_dir, final_iteration
 
 
-def run_exp1b(output_dir, shared_data, gpu=0):
+def run_exp1b(output_dir, shared_data, gpu=0, use_pretrained=False):
     """EXP-1b: 3DGS E25 single-block on the curve."""
     print("\n" + "="*70)
     print("EXP-1b: 3DGS E25 Single-Block Training")
     print("="*70)
 
-    # End-to-end single-block training time (3DGS training-data generation +
-    # 3-stage training). Valid ONLY when EXP-1 runs isolated (run_all --ae puts
-    # it in the solo segment) — concurrent ParaView renders would steal CPU and
-    # inflate this. Add vtp_conversion_min (EXP-11) for the full raw->model time.
-    _train_t0 = time.perf_counter()
-    model_dir, iteration = run_e25_training(output_dir, shared_data, gpu=gpu)
-    train_elapsed = time.perf_counter() - _train_t0
+    pretrained = _find_pretrained_e25() if use_pretrained else None
+    if pretrained is not None:
+        # AE ship-E25 fast path: the shipped model is unpacked into the standard
+        # runs/exp1/e25/<final>/model path (with its full chkpnt) so EXP-1 eval
+        # AND the downstream EXP-7/14 (find_checkpoint that path) see exactly
+        # what a live E25 run would have left — only without the ~1.5 h train.
+        src_model, iteration = pretrained
+        model_dir = _stage_pretrained_e25(src_model, iteration, output_dir)
+        train_elapsed = 0.0
+        e25_source = "pretrained"
+        print(f"\n[AE] Using shipped E25 model (iter {iteration}) — skipping E25 "
+              f"training (0 live E25 train); unpacked to {model_dir}")
+    else:
+        # End-to-end single-block training time (3DGS training-data generation +
+        # 3-stage training). Valid ONLY when EXP-1 runs isolated (run_all --ae
+        # puts it in the solo segment) — concurrent ParaView renders would steal
+        # CPU and inflate this. Add vtp_conversion_min (EXP-11) for full raw->model.
+        _train_t0 = time.perf_counter()
+        model_dir, iteration = run_e25_training(output_dir, shared_data, gpu=gpu)
+        train_elapsed = time.perf_counter() - _train_t0
+        e25_source = "trained"
 
     # Evaluate — pass VizMapper params from final stage config
     print(f"\nEvaluating E25 model (iteration {iteration})...")
@@ -408,12 +469,17 @@ def run_exp1b(output_dir, shared_data, gpu=0):
         "avg_masked_psnr": eval_results["avg"]["masked_psnr"],
         "end_to_end_train_s": round(train_elapsed, 1),
         "end_to_end_train_min": round(train_elapsed / 60, 1),
+        "e25_source": e25_source,
         "eval": eval_results,
         "model_dir": str(model_dir),
         "iteration": iteration,
     }
-    print(f"  End-to-end single-block train time: {train_elapsed/60:.1f} min "
-          f"(data-gen + 3-stage training; isolated run only)")
+    if e25_source == "pretrained":
+        print("  E25 model shipped pre-trained — no live E25 training in AE "
+              "(quality metrics are re-rendered live from the shipped model)")
+    else:
+        print(f"  End-to-end single-block train time: {train_elapsed/60:.1f} min "
+              f"(data-gen + 3-stage training; isolated run only)")
 
     mpsnr = result.get('avg_masked_psnr')
     print(f"\n  E25: {mpsnr:.2f} dB masked PSNR, " if mpsnr else "\n  E25: N/A masked PSNR, ",
@@ -604,6 +670,11 @@ def main():
                         help="Skip LCP baseline")
     parser.add_argument("--only_lcp", action="store_true",
                         help="Only run LCP baseline")
+    parser.add_argument("--use_pretrained_e25", action="store_true",
+                        help="AE: eval the shipped pretrained/e25 model instead "
+                             "of training E25 live (~1.5 h). Unpacked into "
+                             "runs/exp1/e25/ so EXP-7/14 find it. Requires --ae; "
+                             "full reproduce.sh leaves it off -> E25 trains live.")
     # --ae is provided by base_parser: quick mode computes only the enforced R-D
     # points (SZ3 #13 + E25; LCP dropped in AE, see run_exp1c gate) and skips the
     # rest of the sweep (~350min -> ~70min). Verification still passes.
@@ -642,7 +713,8 @@ def main():
 
     # EXP-1b: 3DGS
     if run_3dgs:
-        results["exp1b_e25"] = run_exp1b(output_dir, shared_data, gpu=args.gpu)
+        results["exp1b_e25"] = run_exp1b(output_dir, shared_data, gpu=args.gpu,
+                                         use_pretrained=args.use_pretrained_e25)
 
     # EXP-1c: LCP
     if run_lcp:
