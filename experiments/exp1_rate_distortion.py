@@ -372,7 +372,13 @@ def run_exp1b(output_dir, shared_data, gpu=0):
     print("EXP-1b: 3DGS E25 Single-Block Training")
     print("="*70)
 
+    # End-to-end single-block training time (3DGS training-data generation +
+    # 3-stage training). Valid ONLY when EXP-1 runs isolated (run_all --ae puts
+    # it in the solo segment) — concurrent ParaView renders would steal CPU and
+    # inflate this. Add vtp_conversion_min (EXP-11) for the full raw->model time.
+    _train_t0 = time.perf_counter()
     model_dir, iteration = run_e25_training(output_dir, shared_data, gpu=gpu)
+    train_elapsed = time.perf_counter() - _train_t0
 
     # Evaluate — pass VizMapper params from final stage config
     print(f"\nEvaluating E25 model (iteration {iteration})...")
@@ -394,10 +400,14 @@ def run_exp1b(output_dir, shared_data, gpu=0):
         "cr": round(cr, 0),
         "avg_psnr": eval_results["avg"]["psnr"],
         "avg_masked_psnr": eval_results["avg"]["masked_psnr"],
+        "end_to_end_train_s": round(train_elapsed, 1),
+        "end_to_end_train_min": round(train_elapsed / 60, 1),
         "eval": eval_results,
         "model_dir": str(model_dir),
         "iteration": iteration,
     }
+    print(f"  End-to-end single-block train time: {train_elapsed/60:.1f} min "
+          f"(data-gen + 3-stage training; isolated run only)")
 
     mpsnr = result.get('avg_masked_psnr')
     print(f"\n  E25: {mpsnr:.2f} dB masked PSNR, " if mpsnr else "\n  E25: N/A masked PSNR, ",

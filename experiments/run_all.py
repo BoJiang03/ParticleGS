@@ -109,13 +109,27 @@ def run_experiment(exp_num, module_name, description, gpu, extra_args=None,
 # Each background experiment writes to its own log file (concurrent subprocesses
 # cannot share the terminal legibly). Progress is printed on launch/finish.
 
-def _spawn(exp_num, gpu, extra_args, skip_data_prep, log_path, gpus_held=None):
+def _cpu_env(threads):
+    """Subprocess env with CPU-thread caps. Rendering (ParaView/VTK) is CPU-heavy
+    while training is GPU-heavy; in the parallel segment several ParaView renders
+    run at once, so cap each process's SMP/OpenMP/BLAS threads to cores//concurrency
+    to keep concurrent renderers from all grabbing every core and thrashing the
+    CPU. In isolated segments each experiment gets the full core count."""
+    env = os.environ.copy()
+    t = str(max(1, int(threads)))
+    for k in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+              "NUMEXPR_NUM_THREADS", "VTK_SMP_MAX_THREADS", "NUMBA_NUM_THREADS"):
+        env[k] = t
+    return env
+
+
+def _spawn(exp_num, gpu, extra_args, skip_data_prep, log_path, gpus_held=None, env=None):
     cmd = _exp_cmd(exp_num, gpu, extra_args, skip_data_prep)
     logf = open(log_path, "w")
     logf.write("$ " + " ".join(cmd) + "\n\n")
     logf.flush()
     proc = subprocess.Popen(cmd, cwd=str(PARTICLEGS_ROOT),
-                            stdout=logf, stderr=subprocess.STDOUT)
+                            stdout=logf, stderr=subprocess.STDOUT, env=env)
     print(f"  [launch] EXP-{exp_num:<2d} on GPU {gpu}  (log: {log_path.name})")
     return {"num": exp_num, "gpu": gpu, "proc": proc, "log": logf,
             "t0": time.time(), "path": log_path,
@@ -155,75 +169,51 @@ def _run_pool(exp_nums, gpus, logdir, results):
         running = still
 
 
-def run_ae_parallel(exp_nums, num_gpus, ae_quick, logdir):
-    """AE schedule on a node with physical GPUs 0..num_gpus-1 — one dependency-
-    aware pool, NO phase barrier.
+# Timing/performance-sensitive experiments: their FPS / wall-clock / peak-memory
+# numbers are corrupted by concurrent CPU rendering or GPU sharing, so they must
+# run ISOLATED (exclusive node). exp1 = clean single-block end-to-end train time;
+# exp6 = 3dgs/paraview FPS + the ENFORCED speedup trend; exp11 = finetune time +
+# training peak memory. (exp6.speedup is enforced, so contamination could even
+# FAIL verification, not just misreport.)
+ISOLATED_TIMING = [1, 6, 11]
+# Contention-independent quality metrics (PSNR / Gaussians / size / CR / SSIM /
+# correlation) — deterministic given the model, safe to parallelize.
+PARALLEL_METRIC = [4, 7, 8, 14]
 
-    EXP-4 (the long pole) reserves the low GPUs for its whole run — its blocks
-    pin physical GPUs 0..k-1 (block_gpu = bi % k), and now render in parallel
-    too. Every other experiment is a single-GPU job on the remaining GPU(s):
-    EXP-1 runs first, and the moment it finishes EXP-6/7/8/14 (which need its
-    model) unlock; EXP-11 is independent and runs whenever a GPU is free. When
-    EXP-4 finishes, its GPUs rejoin the pool for the tail.
 
-    This replaces the old two-phase design, whose barrier reaped EXP-4 before
-    starting Phase 2 and left the EXP-1 GPU idle for hours behind EXP-4's tail.
-    """
-    logdir.mkdir(parents=True, exist_ok=True)
-    exp_set = set(exp_nums)
-    results = {}
+def _run_ae_pool(exp_nums, gpus, ae_quick, cpu_env, logdir, results):
+    """Parallel pool for the quality-metric segment. EXP-4 reserves the fewest
+    GPUs for its block round count (freeing the rest); 7/8/14 are single-GPU.
+    All get the shared CPU-thread cap so concurrent ParaView renders don't
+    oversubscribe the CPU."""
+    num_gpus = len(gpus)
+    free = list(gpus)
     running = []
-    free = list(range(num_gpus))
 
-    # EXP-4 reserves the low GPUs for its entire duration. Give it the FEWEST
-    # GPUs that still achieve the same block-training round count it would get
-    # with num_gpus-1 — this frees the rest for the light-stream pool at zero
-    # cost to EXP-4's parallel phase. For 4 blocks on 4 GPUs: EXP-4 takes 2
-    # (blocks 0,1 then 2,3 = 2 rounds, same as 3 GPUs would give), leaving 2 for
-    # the pool. Combined with EXP-1 + EXP-11 that fills all 4 GPUs from the start
-    # instead of the 1-GPU light stream the old num_gpus-1 split produced.
-    # Override with PARTICLEGS_AE_EXP4_GPUS=N to A/B on the real node (e.g. N=4
-    # to make EXP-4's block phase a single round at the cost of pool overlap).
-    e4_gpus = []
-    if 4 in exp_set:
-        reserve_e1 = (1 in exp_set) and num_gpus > 1
+    if 4 in exp_nums:
         blocks = "4" if ae_quick else "2,4"
         override = os.environ.get("PARTICLEGS_AE_EXP4_GPUS")
         if override:
             k4 = max(1, min(num_gpus, int(override)))
-        elif reserve_e1:
-            n_blk = max(int(x) for x in blocks.split(","))   # 4 in AE mode
+        elif num_gpus > 1:
+            n_blk = max(int(x) for x in blocks.split(","))
             rounds = math.ceil(n_blk / (num_gpus - 1))
             k4 = max(1, math.ceil(n_blk / rounds))
         else:
             k4 = num_gpus
-        e4_gpus = free[:k4]
+        e4 = free[:k4]
         free = free[k4:]
-        running.append(_spawn(4, e4_gpus[0], ["--num_gpus", str(k4), "--blocks", blocks],
-                              True, logdir / "exp4.log", gpus_held=e4_gpus))
+        running.append(_spawn(4, e4[0], ["--num_gpus", str(k4), "--blocks", blocks],
+                              True, logdir / "exp4.log", gpus_held=e4, env=cpu_env))
 
-    # Everything else: single-GPU jobs. 6/7/8/14 wait for EXP-1's model when
-    # EXP-1 is in this run; otherwise they assume it exists on disk already.
-    have_exp1 = 1 in exp_set
-    order = lambda xs: sorted(xs, key=lambda n: -_COLD_COST_MIN.get(n, 30))
-    ready, waiting = [], []
-    for n in exp_nums:
-        if n == 4:
-            continue
-        (waiting if (n in NEEDS_EXP1 and have_exp1) else ready).append(n)
-    ready = order(ready)
-
-    print(f"\n{'='*70}\n=== AE parallel pool: EXP-4 on GPUs {e4_gpus or '-'}; "
-          f"ready {ready}" + (f" then {waiting} (after EXP-1)" if waiting else "") +
-          f" ===\n{'='*70}")
-
-    while ready or waiting or running:
-        while ready and free:
-            num = ready.pop(0)
+    queue = sorted([n for n in exp_nums if n != 4],
+                   key=lambda n: -_COLD_COST_MIN.get(n, 30))
+    while queue or running:
+        while queue and free:
+            num = queue.pop(0)
             gpu = free.pop(0)
-            extra = ["--ae"] if (num == 1 and ae_quick) else []
-            running.append(_spawn(num, gpu, extra, True,
-                                  logdir / f"exp{num}.log", gpus_held=[gpu]))
+            running.append(_spawn(num, gpu, [], True, logdir / f"exp{num}.log",
+                                  gpus_held=[gpu], env=cpu_env))
         time.sleep(5)
         still = []
         for job in running:
@@ -231,13 +221,60 @@ def run_ae_parallel(exp_nums, num_gpus, ae_quick, logdir):
                 still.append(job)
                 continue
             _reap(job, results)
-            free.extend(job["gpus_held"])         # release GPU(s) back to pool
-            if job["num"] == 1:
-                if not results.get(1, False):
-                    print("  WARNING: EXP-1 failed; EXP-6/7/8/14 depend on its model.")
-                ready = order(ready + waiting)     # unlock EXP-1 dependents
-                waiting = []
+            free.extend(job["gpus_held"])
         running = still
+
+
+def run_ae_parallel(exp_nums, num_gpus, ae_quick, logdir):
+    """Three-segment AE schedule — parallelize what can be, isolate what can't.
+
+      Segment 1 (isolated): EXP-1 solo, full CPU cores — clean single-block
+                            end-to-end train time + the E25 model 6/7/8/14 need.
+      Segment 2 (parallel): EXP-4/7/8/14 quality metrics across all GPUs, each
+                            capped to cores//num_gpus threads so concurrent
+                            ParaView renders (CPU-heavy) don't thrash the CPU.
+      Segment 3 (isolated): EXP-6 then EXP-11, one at a time, node otherwise
+                            idle, full cores — valid FPS / finetune-time / memory.
+
+    Isolation is required because rendering is CPU-heavy and training is GPU-heavy
+    with very different utilization; overlapping them corrupts any timing/FPS/
+    memory measurement (and EXP-6's enforced speedup). Quality metrics are
+    deterministic, so Segment 2 parallelizes safely.
+    """
+    logdir.mkdir(parents=True, exist_ok=True)
+    gpus = list(range(num_gpus))
+    exp_set = set(exp_nums)
+    results = {}
+    cores = os.cpu_count() or (num_gpus * 8)
+    full_env = _cpu_env(cores)                          # isolated: all cores
+    par_env = _cpu_env(max(1, cores // max(1, num_gpus)))  # parallel: share cores
+
+    # ---- Segment 1: EXP-1 isolated ----
+    if 1 in exp_set:
+        print(f"\n{'='*70}\n=== AE Segment 1 (isolated): EXP-1 solo — clean "
+              f"end-to-end train time + E25 model ===\n{'='*70}")
+        job = _spawn(1, gpus[0], (["--ae"] if ae_quick else []), True,
+                     logdir / "exp1.log", env=full_env)
+        _reap(job, results)
+        if not results.get(1, False):
+            print("  WARNING: EXP-1 failed; EXP-6/7/8/14 depend on its model.")
+
+    # ---- Segment 2: parallel quality-metric experiments ----
+    seg2 = [n for n in exp_nums if n in PARALLEL_METRIC]
+    if seg2:
+        print(f"\n{'='*70}\n=== AE Segment 2 (parallel): {seg2} across {num_gpus} "
+              f"GPUs (CPU cap {max(1, cores // max(1, num_gpus))} threads/proc) "
+              f"===\n{'='*70}")
+        _run_ae_pool(seg2, gpus, ae_quick, par_env, logdir, results)
+
+    # ---- Segment 3: isolated timing/perf experiments, one at a time ----
+    for n in ISOLATED_TIMING:
+        if n == 1 or n not in exp_set:
+            continue
+        print(f"\n{'='*70}\n=== AE Segment 3 (isolated): EXP-{n} solo — valid "
+              f"timing/perf ===\n{'='*70}")
+        job = _spawn(n, gpus[0], [], True, logdir / f"exp{n}.log", env=full_env)
+        _reap(job, results)
 
     return results
 

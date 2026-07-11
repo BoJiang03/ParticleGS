@@ -172,14 +172,24 @@ then runs `verify_results.py --ae`. Three levers keep it inside the budget:
 - **EXP-1 quick mode** — only the enforced rate-distortion points (SZ3 #13,
   LCP #8, E25) are computed; the remaining 15+11 SZ3/LCP sweep points, which
   exist only to draw the R-D *curve*, are skipped. EXP-1 drops ~350 → ~80 min.
-- **Dependency-aware scheduling** — EXP-4 (the long pole) runs on the low GPUs
-  while EXP-1 then EXP-6/7/8/11/14 fill the rest; the EXP-1 dependents unlock the
-  moment EXP-1 finishes (no phase barrier). Per-experiment logs land in
-  `runs/ae_logs/`.
+- **Three-segment schedule (parallelize what can, isolate what can't)** —
+  performance measurements are corrupted by contention (rendering is CPU-heavy,
+  training is GPU-heavy), so timing/FPS/memory experiments run *isolated* while
+  quality metrics run *in parallel*:
+  1. *Isolated* — **EXP-1** solo (full CPU cores) for a clean single-block
+     end-to-end train time (`end_to_end_train_min`) + the E25 model 6/7/8/14 need.
+  2. *Parallel* — **EXP-4/7/8/14** quality metrics across all GPUs, each capped to
+     `cores // num_gpus` CPU threads so concurrent ParaView renders don't thrash
+     the CPU.
+  3. *Isolated* — **EXP-6** (FPS + the enforced speedup) then **EXP-11**
+     (finetune time, peak memory), one at a time, node otherwise idle.
+  Per-experiment logs land in `runs/ae_logs/`. `PARTICLEGS_AE_EXP4_GPUS=N`
+  overrides EXP-4's GPU count for A/B tuning.
 
 Estimated wall-clock is **hardware-dependent**; on a 4× A100 node expect roughly
-**~5–7 h** for the reduced retrain. Needs ≥ 2 GPUs; on a single GPU use
-`scripts/reproduce.sh`. Add `--sequential` to disable parallel scheduling.
+**~6–8 h** (the isolated timing segments deliberately leave GPUs idle for clean
+measurement). Needs ≥ 2 GPUs; on a single GPU use `scripts/reproduce.sh`. Add
+`--sequential` to disable parallel scheduling.
 
 **Eval-only fallback (~1–2 h, no training).** If you cannot retrain within
 budget, verify the reported numbers by re-rendering from the shipped model
