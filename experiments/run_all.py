@@ -38,6 +38,19 @@ from pathlib import Path
 
 from experiments.common import PARTICLEGS_ROOT, PYTHON_BIN, RUNS_DIR, ensure_shared_data
 
+# Reviewer-facing progress (schedule banner, heartbeat, per-experiment PASS/FAIL
+# digest) must appear live even when stdout is redirected to a log / tee / nohup
+# / tmux pipe — the common way an AE reviewer captures a multi-hour run. Piped
+# stdout is block-buffered by default, so every update sits unseen until ~8 KB
+# accumulates; the heartbeat, whose whole point is to prove liveness during long
+# silent stretches, is exactly what gets swallowed. Force line buffering so each
+# print flushes at its newline regardless of how the run was launched.
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+except (AttributeError, ValueError):
+    pass
+
 ALL_EXPERIMENTS = {
     1: ("exp1_rate_distortion", "3DGS vs SZ3 Rate-Distortion"),
     2: ("exp2_training_ablation", "Training Strategy Ablation"),

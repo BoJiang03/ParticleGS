@@ -137,7 +137,7 @@ fi
 # existing trained model on disk skip their training stage.
 echo
 echo "[run] experiments.run_all --ae --exp ${EXP} --gpu ${GPU} --num_gpus ${NUM_GPUS} ${SEQUENTIAL}"
-python -m experiments.run_all \
+python -u -m experiments.run_all \
     --ae --exp "${EXP}" --gpu "${GPU}" --num_gpus "${NUM_GPUS}" ${SEQUENTIAL}
 
 # ── 3. Aggregate + verify ────────────────────────────────────────────────

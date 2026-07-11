@@ -77,7 +77,7 @@ fi
 # runs/expN/results.json.
 echo
 echo "[run] experiments.run_all --exp ${EXP} --gpu ${GPU} --num_gpus ${NUM_GPUS}"
-python -m experiments.run_all \
+python -u -m experiments.run_all \
     --gpu "${GPU}" --num_gpus "${NUM_GPUS}" --exp "${EXP}"
 
 # ── 3. Aggregate numeric results into paper-table form ───────────────────
