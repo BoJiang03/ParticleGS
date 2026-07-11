@@ -22,6 +22,50 @@ from pathlib import Path
 
 from experiments.common import *
 
+# ── AE ship-4-blocks fast path ──────────────────────────────────────────────
+# The AE artifact ships the N trained sub-block models so the reviewer does NOT
+# re-run the N per-block end-to-end trainings (each = a full 4K/6K GT render +
+# 39k-iter train). This is the 1+4+1 → 1+1 reduction: only E25 (EXP-1) and the
+# merged-model finetune train live; the sub-blocks are provided pre-trained.
+#
+# Upload layout (self-contained, only what merge_blocks() needs), per block i:
+#     pretrained/blocks_<N>/block_<ii>/
+#         model/point_cloud/iteration_<it>/point_cloud.ply
+#         model/viz_mapper_<it>.pth
+#         shared/normalization.json
+#
+# Full scripts/reproduce.sh ships no pretrained/ dir → _find_pretrained_blocks
+# returns None → blocks train live exactly as before. Old behavior untouched.
+PRETRAINED_DIR = PARTICLEGS_ROOT / "pretrained"
+
+
+def _find_pretrained_blocks(n_blocks):
+    """Return (block_models, block_run_dirs) from shipped pretrained/blocks_<N>/,
+    matching the train_block()/merge_blocks() contract, or None if any block is
+    absent/incomplete (→ caller trains the blocks live)."""
+    base = PRETRAINED_DIR / f"blocks_{n_blocks}"
+    if not base.is_dir():
+        return None
+    block_models, block_run_dirs = [], []
+    for bi in range(n_blocks):
+        bdir = base / f"block_{bi:02d}"
+        model_dir = bdir / "model"
+        pc = model_dir / "point_cloud"
+        norm = bdir / "shared" / "normalization.json"
+        iters = sorted(pc.glob("iteration_*"),
+                       key=lambda p: int(p.name.split("_")[1])) if pc.is_dir() else []
+        if not iters or not norm.exists():
+            print(f"  [pretrained] {bdir} incomplete — training all blocks live")
+            return None
+        it = int(iters[-1].name.split("_")[1])
+        if not (model_dir / f"viz_mapper_{it}.pth").exists() and bi == 0:
+            print(f"  [pretrained] block 0 missing viz_mapper_{it}.pth — live")
+            return None
+        block_models.append((model_dir, it))
+        block_run_dirs.append(bdir)
+    return block_models, block_run_dirs
+
+
 # Per-block training — uses E25 config (best single-block, validated at 26.24 dB).
 # Same config for single-block and per-block ensures fair comparison.
 PER_BLOCK_TRAIN = {
@@ -390,8 +434,15 @@ def finetune_merged(merged_dir, shared_data, output_dir, logs_dir, gpu):
 
 
 def run_n_blocks(n_blocks, output_dir, shared_data, gpu=0, num_gpus=1,
-                 compute_ssim=False):
-    """Run full block pipeline for n_blocks."""
+                 compute_ssim=False, use_pretrained=False):
+    """Run full block pipeline for n_blocks.
+
+    use_pretrained: AE fast path only. When True AND pretrained/blocks_<N>/ is
+    shipped, skip partition + per-block end-to-end training and go straight to
+    merge → finetune (1+4+1 → 1+1). Full reproduce.sh leaves this False, so it
+    trains all blocks live even though pretrained/ is present on disk — the
+    'full reproduction' semantics are preserved.
+    """
     print(f"\n{'='*70}")
     print(f"Block Pipeline: {n_blocks} blocks")
     print(f"{'='*70}")
@@ -423,51 +474,64 @@ def run_n_blocks(n_blocks, output_dir, shared_data, gpu=0, num_gpus=1,
                     print(f"  SSIM={ft_eval['avg']['ssim']:.4f} saved")
         return existing
 
-    # Partition
-    print(f"\n[1] Partitioning into {n_blocks} blocks...")
-    partition_info, partition_dir = partition_raw_data(n_blocks, run_dir, logs)
+    # AE fast path (1+4+1 → 1+1): only when explicitly enabled (AE mode) AND the
+    # N sub-block models are shipped, skip partition + per-block end-to-end
+    # training and go straight to merge. Full reproduce.sh keeps use_pretrained
+    # False → trains live even if pretrained/ exists on disk.
+    pretrained = _find_pretrained_blocks(n_blocks) if use_pretrained else None
+    if pretrained is not None:
+        block_models, block_run_dirs = pretrained
+        print(f"\n[AE] Using {n_blocks} shipped sub-block models — skipping "
+              f"partition + per-block training (1+4+1 → 1+1)")
+        for bi, (md, it) in enumerate(block_models):
+            print(f"  block {bi}: {md} @ iter {it}")
+        (run_dir / "blocktrain_done").touch()
+    else:
+        # Partition
+        print(f"\n[1] Partitioning into {n_blocks} blocks...")
+        partition_info, partition_dir = partition_raw_data(n_blocks, run_dir, logs)
 
-    # Prepare all blocks first (sequential — needs pvbatch)
-    block_run_dirs = []
-    block_data_list = []
-    for bi in range(n_blocks):
-        block_raw = partition_dir / f"block_{bi}"
-        block_dir = run_dir / f"block_{bi:02d}"
-        block_run_dirs.append(block_dir)
+        # Prepare all blocks first (sequential — needs pvbatch)
+        block_run_dirs = []
+        block_data_list = []
+        for bi in range(n_blocks):
+            block_raw = partition_dir / f"block_{bi}"
+            block_dir = run_dir / f"block_{bi:02d}"
+            block_run_dirs.append(block_dir)
 
-        print(f"\n[2.{bi}] Preparing block {bi}...")
-        block_data = prepare_block_data(bi, block_raw, block_dir, shared_data, logs)
-        block_data_list.append(block_data)
+            print(f"\n[2.{bi}] Preparing block {bi}...")
+            block_data = prepare_block_data(bi, block_raw, block_dir, shared_data, logs)
+            block_data_list.append(block_data)
 
-    # Train blocks in parallel (batch of num_gpus at a time)
-    from concurrent.futures import ProcessPoolExecutor, as_completed
-    block_models = [None] * n_blocks
+        # Train blocks in parallel (batch of num_gpus at a time)
+        from concurrent.futures import ProcessPoolExecutor, as_completed
+        block_models = [None] * n_blocks
 
-    for batch_start in range(0, n_blocks, num_gpus):
-        batch_end = min(batch_start + num_gpus, n_blocks)
-        batch = list(range(batch_start, batch_end))
-        print(f"\n[3] Training blocks {batch} in parallel ({len(batch)} GPUs)...")
+        for batch_start in range(0, n_blocks, num_gpus):
+            batch_end = min(batch_start + num_gpus, n_blocks)
+            batch = list(range(batch_start, batch_end))
+            print(f"\n[3] Training blocks {batch} in parallel ({len(batch)} GPUs)...")
 
-        futures = {}
-        with ProcessPoolExecutor(max_workers=len(batch)) as executor:
-            for bi in batch:
-                block_gpu = bi % num_gpus
-                fut = executor.submit(
-                    train_block, bi, block_data_list[bi],
-                    block_run_dirs[bi], logs, block_gpu)
-                futures[fut] = bi
+            futures = {}
+            with ProcessPoolExecutor(max_workers=len(batch)) as executor:
+                for bi in batch:
+                    block_gpu = bi % num_gpus
+                    fut = executor.submit(
+                        train_block, bi, block_data_list[bi],
+                        block_run_dirs[bi], logs, block_gpu)
+                    futures[fut] = bi
 
-            for fut in as_completed(futures):
-                bi = futures[fut]
-                model_dir, iteration = fut.result()
-                block_models[bi] = (model_dir, iteration)
-                print(f"  Block {bi} done: {iteration} iterations")
+                for fut in as_completed(futures):
+                    bi = futures[fut]
+                    model_dir, iteration = fut.result()
+                    block_models[bi] = (model_dir, iteration)
+                    print(f"  Block {bi} done: {iteration} iterations")
 
-    # Signal to the AE scheduler that the multi-GPU block-training phase is
-    # complete. Everything after this (merge / eval / finetune) runs on the
-    # single base GPU, so the scheduler can release the other GPUs to the
-    # 7/8/14 quality-metric pool while this finetune tail runs.
-    (run_dir / "blocktrain_done").touch()
+        # Signal to the AE scheduler that the multi-GPU block-training phase is
+        # complete. Everything after this (merge / eval / finetune) runs on the
+        # single base GPU, so the scheduler can release the other GPUs to the
+        # 7/8/14 quality-metric pool while this finetune tail runs.
+        (run_dir / "blocktrain_done").touch()
 
     # Merge
     print(f"\n[4] Merging {n_blocks} blocks...")
@@ -526,6 +590,10 @@ def main():
                         help="Comma-separated block counts to test")
     parser.add_argument("--compute_ssim", action="store_true",
                         help="Also compute SSIM (requires skimage)")
+    parser.add_argument("--use_pretrained_blocks", action="store_true",
+                        help="AE fast path: consume shipped pretrained/blocks_N/ "
+                             "sub-block models instead of training them live "
+                             "(1+4+1 → 1+1). Full reproduce.sh must NOT set this.")
     args = parser.parse_args()
     set_pvbatch_cuda_device(args.gpu)  # prepare/merge/finetune renders on base GPU
 
@@ -547,7 +615,8 @@ def main():
     for n in block_counts:
         results[f"blocks_{n}"] = run_n_blocks(
             n, output_dir, shared_data, gpu=args.gpu, num_gpus=args.num_gpus,
-            compute_ssim=args.compute_ssim)
+            compute_ssim=args.compute_ssim,
+            use_pretrained=args.use_pretrained_blocks)
 
     # Summary table
     print(f"\n{'='*70}")

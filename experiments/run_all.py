@@ -332,9 +332,17 @@ def _run_ae_seg2(exp_nums, gpus, ae_quick, cpu_env, logdir, results):
         n_blk = max(int(x) for x in blocks.split(","))
         marker = RUNS_DIR / "exp4" / f"blocks_{n_blk}" / "blocktrain_done"
         marker.unlink(missing_ok=True)  # clear any stale signal from a prior run
-        print(f"  EXP-4 takes all {len(gpus)} GPUs for {n_blk}-block training; "
-              f"GPUs {others} free up for EXP-7/8/14 once block-training ends.")
-        exp4_job = _spawn(4, base, ["--num_gpus", str(len(gpus)), "--blocks", blocks],
+        exp4_args = ["--num_gpus", str(len(gpus)), "--blocks", blocks]
+        if ae_quick:
+            # AE fast path (1+4+1 → 1+1): consume the shipped 4 sub-block models
+            # instead of training them live. EXP-4 signals blocktrain_done almost
+            # immediately and drops into its merge→finetune tail, freeing the
+            # non-base GPUs for the 7/8/14 pool right away.
+            exp4_args.append("--use_pretrained_blocks")
+        mode = "shipped sub-blocks → merge/finetune" if ae_quick else "live block training"
+        print(f"  EXP-4 {n_blk}-block ({mode}); GPUs {others} free up for "
+              f"EXP-7/8/14 once EXP-4 signals blocktrain_done.")
+        exp4_job = _spawn(4, base, exp4_args,
                           True, logdir / "exp4.log", gpus_held=list(gpus), env=cpu_env)
         # Hold all GPUs until EXP-4 finishes block-training (marker) or exits.
         while exp4_job["proc"].poll() is None and not marker.exists():
@@ -512,6 +520,8 @@ def main():
             if num == 4:
                 blocks = "4" if args.ae else "2,4"
                 extra = ["--num_gpus", str(args.num_gpus), "--blocks", blocks]
+                if args.ae:
+                    extra.append("--use_pretrained_blocks")  # 1+4+1 → 1+1
             ok = run_experiment(num, module, desc, args.gpu, extra_args=extra,
                                 skip_data_prep=num not in SELF_PREP_EXPERIMENTS)
             results[num] = ok
