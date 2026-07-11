@@ -9,8 +9,8 @@ Sub-experiments:
   1c: LCP baseline curve (particle-specific compressor)
 
 Expected results:
-  SZ3 @ 286x CR: ~18 dB masked PSNR
-  3DGS E25:      26.24 dB masked PSNR @ 290x CR (+7.6 dB)
+  SZ3 @ 292x CR: 18.57 dB masked PSNR (iso-CR with E25, point #13)
+  3DGS E25:      26.28 dB masked PSNR @ 290x CR (+7.7 dB at matched CR)
   LCP:           higher CR than SZ3 at same EB (particle-specific)
 
 Usage:
@@ -33,11 +33,15 @@ LCP_BIN = os.environ.get("PARTICLEGS_LCP",
     if (REPO_ROOT / "LCP" / "build" / "tools" / "sz3" / "lcp").exists()
     else shutil.which("lcp") or "lcp")
 
-# SZ3 error bound sweep (15 points, matches all_exp.md Table 1a)
+# SZ3 error bound sweep (15 points). Point #13 (EB=1.17) is retuned to sit at
+# CR~292, matching E25's CR~290, so the enforced iso-CR PSNR comparison (SZ3 vs
+# ParticleGS at the SAME compression ratio) is a real measured point, not an
+# interpolation. It replaces the former EB=1.01/CR~233 sample; the rest of the
+# sweep is unchanged and still draws the paper's rate-distortion curve.
 SZ3_EB_SWEEP = [
     4.54e-03, 1.23e-02, 2.65e-02, 4.90e-02, 8.27e-02,
     1.25e-01, 1.85e-01, 2.60e-01, 3.56e-01, 4.87e-01,
-    5.85e-01, 7.03e-01, 8.44e-01, 1.01e+00, 1.29e+00,
+    5.85e-01, 7.03e-01, 8.44e-01, 1.17e+00, 1.29e+00,
 ]
 
 # AE quick mode (--ae): the rest of the sweep exists only to draw the paper's

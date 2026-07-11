@@ -175,19 +175,19 @@
     },
     {
       "path": "exp1.exp1a_sz3.13.avg_masked_psnr",
-      "expected": 18.78,
+      "expected": 18.57,
       "class": "hw_independent",
       "tolerance_abs": 0.1,
       "unit": "dB",
-      "paper_ref": "Rate-distortion figure (SZ3 point nearest ParticleGS CR)",
-      "note": "SZ3 is deterministic, hence the tight tolerance. Together with exp1b_e25.avg_masked_psnr this enforces the paper's headline claim: ParticleGS leads SZ3 by >7 dB masked PSNR at matched compression ratio (~290x vs ~233x)."
+      "paper_ref": "Rate-distortion figure (SZ3 iso-CR point, EB=1.17)",
+      "note": "SZ3 is deterministic, hence the tight tolerance. SZ3 point #13 is tuned to CR~292 to match E25's CR~290, so this is a true iso-CR comparison. Together with exp1b_e25.avg_masked_psnr it enforces the paper's headline claim: ParticleGS leads SZ3 by ~7.7 dB masked PSNR at matched compression ratio (~290x vs ~292x)."
     },
     {
       "path": "exp1.exp1a_sz3.13.cr",
-      "expected": 233.46,
+      "expected": 291.99,
       "class": "hw_independent",
       "tolerance_rel": 0.01,
-      "paper_ref": "Rate-distortion figure (SZ3 point nearest ParticleGS CR)"
+      "paper_ref": "Rate-distortion figure (SZ3 iso-CR point, EB=1.17, matched to E25 CR~290)"
     },
     {
       "path": "exp1.exp1c_lcp.8.avg_masked_psnr",

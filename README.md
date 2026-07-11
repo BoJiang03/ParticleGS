@@ -244,8 +244,8 @@ from non-deterministic CUDA ops. These should match on any GPU.
 |---|---|---|---|
 | ParticleGS (E25) masked PSNR | 26.28 dB | ± 0.3 dB | Tab. 5 / rd fig |
 | ParticleGS (E25) compression ratio | 290× | ± 3 % | Tab. 5 / rd fig |
-| SZ3 masked PSNR at matched CR (~233×) | 18.78 dB | ± 0.1 dB | rd fig |
-| SZ3 compression ratio (nearest point) | 233.46× | ± 1 % | rd fig |
+| SZ3 masked PSNR at matched CR (~292×) | 18.57 dB | ± 0.1 dB | rd fig |
+| SZ3 compression ratio (iso-CR point) | 291.99× | ± 1 % | rd fig |
 | LCP masked PSNR at matched CR (~240×) | 15.22 dB | ± 0.1 dB | rd fig |
 | 2-block finetuned masked PSNR | 27.30 dB | ± 0.3 dB | Tab. 3 |
 | 2-block finetuned # Gaussians | 564 062 | ± 3 % | Tab. 3 |
