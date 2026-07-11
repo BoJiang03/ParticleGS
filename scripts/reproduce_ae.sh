@@ -78,9 +78,15 @@ _cbase=""
 command -v conda >/dev/null 2>&1 && _cbase="$(conda info --base 2>/dev/null || true)"
 [[ -z "${_cbase}" && -f "${CONDA_ROOT}/etc/profile.d/conda.sh" ]] && _cbase="${CONDA_ROOT}"
 if [[ -n "${_cbase}" && -f "${_cbase}/etc/profile.d/conda.sh" ]]; then
+    # conda's hooks aren't nounset-clean (base hook reads $PS1; cuda-nvcc 12.6's
+    # activate.d expands $NVCC_PREPEND_FLAGS unset) — under `set -u` that aborts
+    # mid-source before the command returns, so `|| true` can't catch it. Run
+    # the source+activate with nounset temporarily off.
+    set +u
     # shellcheck disable=SC1091
     source "${_cbase}/etc/profile.d/conda.sh"
-    conda activate particlegs 2>/dev/null || true
+    conda activate particlegs || true
+    set -u
 fi
 
 echo "======================================================================"

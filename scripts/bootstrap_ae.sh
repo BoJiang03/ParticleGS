@@ -27,6 +27,14 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 ENV_NAME="particlegs"
 
+# conda's shell hooks are NOT nounset-clean: the base hook reads $PS1, and some
+# activate.d scripts (e.g. cuda-nvcc 12.6's ~cuda-nvcc_activate.sh expands
+# $NVCC_PREPEND_FLAGS with no default) reference unset vars. Under `set -u` that
+# aborts the shell mid-source — before `conda activate` returns, so a trailing
+# `|| true` cannot catch it. Run every conda source/activate with nounset off.
+# (Documented conda pitfall: conda/conda#8186.)
+nou() { set +u; "$@"; local rc=$?; set -u; return $rc; }
+
 # ── 1. conda ─────────────────────────────────────────────────────────────────
 CONDA_ROOT="${PARTICLEGS_CONDA:-$HOME/miniforge3}"
 if ! command -v conda >/dev/null 2>&1; then
@@ -42,11 +50,11 @@ if ! command -v conda >/dev/null 2>&1; then
         rm -rf "${tmp}"
     fi
     # shellcheck disable=SC1091
-    source "${CONDA_ROOT}/etc/profile.d/conda.sh"
+    nou source "${CONDA_ROOT}/etc/profile.d/conda.sh"
 else
     echo "[bootstrap] using conda on PATH: $(command -v conda)"
     # shellcheck disable=SC1091
-    source "$(conda info --base)/etc/profile.d/conda.sh"
+    nou source "$(conda info --base)/etc/profile.d/conda.sh"
 fi
 
 # ── 2. pick a driver-matched env file + build arch list ──────────────────────
@@ -86,7 +94,7 @@ else
     echo "[bootstrap] creating env '${ENV_NAME}' from ${ENV_FILE}..."
     conda env create -n "${ENV_NAME}" -f "${REPO_ROOT}/${ENV_FILE}"
 fi
-conda activate "${ENV_NAME}"
+nou conda activate "${ENV_NAME}"
 
 # ── 4. build extensions + SZ3/LCP in the active env ──────────────────────────
 echo "[bootstrap] building CUDA extensions + baselines (install.sh --no-env)..."
