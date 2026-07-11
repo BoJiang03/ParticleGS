@@ -2,12 +2,23 @@
 # reproduce_ae.sh — AE-focused reproduction sized for the SC reviewer budget.
 #
 # One command on a bare node: it bootstraps conda + a driver-matched, built
-# `particlegs` env (scripts/bootstrap_ae.sh), fetches data, runs the eight
-# experiments that produce the reduced AE set of 19 enforced metrics (EXP-1, 4,
-# 6, 7, 8, 11, 14 -> adae/reference_results.json), then verifies them. The two
-# render-heaviest units are dropped from this fast path to fit the ~8 h budget:
-# EXP-13 (FIRE-2 full retrain) and EXP-4's 2-block config (4-block only here).
-# The full 26/26 set is still available via scripts/reproduce.sh.
+# `particlegs` env (scripts/bootstrap_ae.sh), fetches data, runs the seven
+# experiments that produce the reduced AE set of 18 enforced metrics (EXP-1, 4,
+# 6, 7, 8, 11, 14 -> adae/reference_results.json), then verifies them.
+#
+# What the AE fast path drops vs the full reproduce.sh (26 metrics), to fit the
+# ~8 h budget — none of it weakens an enforced number the full run also checks:
+#   * The 4 per-block end-to-end trainings are replaced by 4 shipped, pre-trained
+#     sub-block models (pretrained/blocks_4/, ~36 MB). AE trains only TWO models
+#     live: the E25 single block (EXP-1) and the 4-block finetune (EXP-4) — the
+#     1+4+1 -> 1+1 reduction, since each per-block GT-render + 39k-iter train is
+#     the real time sink. ONLY models are shipped; all ground truth (training and
+#     eval) is still rendered live on your node.
+#   * EXP-13 (FIRE-2 full retrain) and EXP-4's 2-block config are skipped
+#     (4-block only). The LCP baseline is skipped — it is strictly worse than
+#     SZ3, so the iso-CR comparison only needs 3DGS vs SZ3.
+# The full 26/26 set is still available via scripts/reproduce.sh (trains all
+# blocks live, runs FIRE-2 + 2-block + LCP + the full SZ3/LCP sweep).
 #
 # Driver-adaptive build: the default env pins CUDA 13.0 / torch cu130 (needs an
 # R580+ driver). On a node whose driver tops out at CUDA 12.x — e.g. Chameleon
@@ -18,24 +29,35 @@
 # Two levers keep it inside the ~8 h AE budget on a multi-GPU node:
 #
 #   1. EXP-1 quick mode (--ae): only the enforced rate-distortion points
-#      (SZ3 #13, LCP #8, E25) are computed; the rest of the 15+11 SZ3/LCP
-#      sweep — which exists only to draw the paper's R-D curve — is skipped.
-#      EXP-1 drops from ~350 min to ~80 min. Verification still passes.
+#      (SZ3 #13 at the iso-CR ~292x point, and E25) are computed; the rest of
+#      the 15-point SZ3 sweep — which exists only to draw the paper's R-D curve
+#      — is skipped. EXP-1 drops from ~350 min to ~80 min (E25 training now
+#      dominates and cannot be reduced). Verification still passes.
 #   2. Three-segment scheduling (parallelize what can be, isolate what can't):
-#        Seg 1 [isolated]: EXP-1 solo    -> clean end-to-end train time + E25.
-#        Seg 2 [mixed]:    EXP-4 takes all GPUs for its block-training round,
-#                          then releases the non-base GPUs to the EXP-7/8/14
-#                          pool while its finetune tail runs on the base GPU.
+#        Seg 1 [isolated]: EXP-1 solo    -> clean end-to-end E25 train time.
+#        Seg 2 [mixed]:    EXP-4 loads the 4 shipped sub-blocks -> merge -> 60k
+#                          finetune on the base GPU, while EXP-7/8/14 run in
+#                          parallel on the other GPUs. No live block training,
+#                          so the non-base GPUs are free from the start.
 #        Seg 3 [isolated]: EXP-6 then EXP-11 solo -> clean FPS / time / memory.
 #      Timing/FPS/memory metrics (EXP-1/6/11) are measured on an otherwise-idle
 #      node; deterministic quality metrics (EXP-4/7/8/14) run in parallel.
 #
-# Estimated wall-clock (cold, from raw data):
-#   4× A100 / RTX PRO 6000 : ~5 h        (recommended AE node)
-#   2× GPU                 : ~8 h
-#   1× GPU                 : use scripts/reproduce.sh instead (this needs ≥2)
+# GPU CHOICE MATTERS MORE THAN GPU COUNT. Ground-truth generation renders 280M
+# point-gaussians in ParaView — a graphics (fill-rate) workload, not compute. A
+# graphics-class GPU (RTX PRO 6000 Blackwell, RTX 6000 Ada, L40/L40S) renders it
+# several times faster than a compute-class card (A100/H100), which is render-
+# bound on this pipeline and can overrun the budget. Prefer a graphics node.
 #
-# Full-fidelity alternative (all 15+11 sweep points, ~11–15 h):
+# Estimated wall-clock (cold, from raw data; dominated by E25 training + live GT
+# rendering, so hardware/driver-dependent):
+#   graphics node, >=2 GPUs   : ~3-4 h   (recommended; e.g. RTX PRO 6000 / L40)
+#   compute node (A100/H100)  : render-bound; likely exceeds the ~8 h budget
+#   1x GPU                    : use scripts/reproduce.sh instead (this needs >=2)
+# Reference point: on a 2x RTX PRO 6000 workstation the EXP-4 shipped-block fast
+# path (merge + 60k finetune + eval) measured ~17 min.
+#
+# Full-fidelity alternative (all 15+11 sweep points, live block training, ~11-15 h):
 #   bash scripts/reproduce.sh
 #
 # Eval-only fallback (no training; verifies re-rendered metrics from shipped
@@ -69,7 +91,7 @@ while [[ $# -gt 0 ]]; do
         --eval-only) EVAL_ONLY=1; shift ;;
         --no-verify) VERIFY=0; shift ;;
         --no-setup) SETUP=0; shift ;;
-        -h|--help) sed -n '2,40p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,71p' "$0"; exit 0 ;;
         *) echo "unknown arg: $1" >&2; exit 1 ;;
     esac
 done
@@ -99,7 +121,7 @@ if [[ -n "${_cbase}" && -f "${_cbase}/etc/profile.d/conda.sh" ]]; then
 fi
 
 echo "======================================================================"
-echo "ParticleGS — AE reproduction (19 enforced metrics, reduced fast path)"
+echo "ParticleGS — AE reproduction (18 enforced metrics, reduced fast path)"
 echo "  num_gpus:    ${NUM_GPUS}"
 echo "  gpu base:    ${GPU}"
 echo "  experiments: ${EXP}"
