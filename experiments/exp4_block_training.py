@@ -141,63 +141,106 @@ def prepare_block_data(block_id, block_raw_dir, block_run_dir, shared_data, logs
     return {"vtp": vtp_path, "normalization": norm_path, "ply": ply_path}
 
 
+def render_stage_data(block_id, block_data, block_run_dir, si, stage, logs_dir):
+    """Generate GT training data for one block stage and return its data_dir.
+
+    A stage's GT render depends only on the VTP + camera/viz params, NOT on any
+    training checkpoint, so stages can be rendered ahead of (and concurrently
+    with) training. Idempotent: skips if the stage is already trained, and the
+    underlying generate_* helpers skip if the images already exist.
+    """
+    stage_name = f"block{block_id}_{stage['name']}"
+    stage_dir = block_run_dir / f"{si:02d}_{stage['name']}"
+    data_dir = stage_dir / "data"
+
+    # If this stage is already fully trained (restart), skip rendering entirely.
+    if find_checkpoint(stage_dir / "model"):
+        return data_dir
+
+    n_frames = stage.get("num_frames", 400)
+    if stage.get("mix"):
+        generate_mix_training_data(
+            block_data["vtp"], data_dir, block_data["normalization"],
+            "1.0,0.7,0.5", n_frames, "142", n_frames, "242", 0.98,
+            stage["width"], stage["height"], 0.8,
+            logs_dir, stage_name)
+    else:
+        generate_training_data(
+            block_data["vtp"], data_dir, block_data["normalization"],
+            "multi_orbit", "1.0,0.7,0.5", n_frames,
+            stage["width"], stage["height"], logs_dir, stage_name)
+
+    prepare_stage_data_dir(data_dir, block_data["ply"], block_data["normalization"])
+    return data_dir
+
+
 def train_block(block_id, block_data, block_run_dir, logs_dir, gpu):
-    """Train one block through 3 progressive stages."""
-    # This runs in a ProcessPoolExecutor worker; pin its GT rendering to this
-    # block's GPU so parallel blocks render concurrently instead of all
-    # serializing their pvbatch onto CUDA 0.
+    """Train one block through 3 progressive stages, pipelining render vs train.
+
+    Runs in a ProcessPoolExecutor worker, so set_pvbatch_cuda_device pins this
+    block's GT rendering to its own GPU (parallel blocks render concurrently
+    instead of all serializing pvbatch onto CUDA 0).
+
+    Within the block, rendering (ParaView, CPU-heavy) and training (3DGS,
+    GPU-heavy) use complementary resources, so a single-slot prefetch thread
+    renders stage k+1's GT while stage k trains on the GPU. The render for a
+    stage is checkpoint-independent, so this is safe; it overlaps the render
+    bottleneck with training on the same block_gpu instead of running them
+    strictly back-to-back.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
     set_pvbatch_cuda_device(gpu)
     prev_checkpoint = None
     final_model = None
     final_iter = None
 
-    for si, stage in enumerate(PER_BLOCK_STAGES):
-        stage_name = f"block{block_id}_{stage['name']}"
-        stage_dir = block_run_dir / f"{si:02d}_{stage['name']}"
-        data_dir = stage_dir / "data"
-        model_dir = stage_dir / "model"
+    with ThreadPoolExecutor(max_workers=1) as prefetch:
+        # Kick off stage 0's render; each iteration prefetches the next stage's
+        # render before training the current one.
+        render_fut = prefetch.submit(
+            render_stage_data, block_id, block_data, block_run_dir,
+            0, PER_BLOCK_STAGES[0], logs_dir)
 
-        existing = find_checkpoint(model_dir)
-        if existing:
-            prev_checkpoint = existing
+        for si, stage in enumerate(PER_BLOCK_STAGES):
+            stage_name = f"block{block_id}_{stage['name']}"
+            stage_dir = block_run_dir / f"{si:02d}_{stage['name']}"
+            model_dir = stage_dir / "model"
+
+            data_dir = render_fut.result()  # this stage's GT (prefetched)
+
+            # Start prefetching the NEXT stage's render so it overlaps whatever
+            # we do for this stage (train or skip) below.
+            if si + 1 < len(PER_BLOCK_STAGES):
+                render_fut = prefetch.submit(
+                    render_stage_data, block_id, block_data, block_run_dir,
+                    si + 1, PER_BLOCK_STAGES[si + 1], logs_dir)
+
+            existing = find_checkpoint(model_dir)
+            if existing:
+                prev_checkpoint = existing
+                final_model = model_dir
+                final_iter = int(existing.stem.replace("chkpnt", ""))
+                continue
+
+            train_cfg = dict(PER_BLOCK_TRAIN,
+                             iterations=stage["iterations"],
+                             resolution_scale=stage["res_scale"],
+                             densify_until_iter=stage["densify_until"],
+                             densify_grad_threshold=stage["densify_grad"],
+                             densification_interval=stage["densify_interval"])
+
+            final_iter = run_stage_training(data_dir, model_dir, train_cfg, logs_dir,
+                                           f"train_{stage_name}",
+                                           start_checkpoint=prev_checkpoint,
+                                           init_iterations=10, gpu=gpu)
+            prev_checkpoint = find_checkpoint(model_dir, final_iter)
             final_model = model_dir
-            final_iter = int(existing.stem.replace("chkpnt", ""))
-            continue
 
-        # Generate data
-        n_frames = stage.get("num_frames", 400)
-        if stage.get("mix"):
-            generate_mix_training_data(
-                block_data["vtp"], data_dir, block_data["normalization"],
-                "1.0,0.7,0.5", n_frames, "142", n_frames, "242", 0.98,
-                stage["width"], stage["height"], 0.8,
-                logs_dir, stage_name)
-        else:
-            generate_training_data(
-                block_data["vtp"], data_dir, block_data["normalization"],
-                "multi_orbit", "1.0,0.7,0.5", n_frames,
-                stage["width"], stage["height"], logs_dir, stage_name)
-
-        prepare_stage_data_dir(data_dir, block_data["ply"], block_data["normalization"])
-
-        train_cfg = dict(PER_BLOCK_TRAIN,
-                         iterations=stage["iterations"],
-                         resolution_scale=stage["res_scale"],
-                         densify_until_iter=stage["densify_until"],
-                         densify_grad_threshold=stage["densify_grad"],
-                         densification_interval=stage["densify_interval"])
-
-        final_iter = run_stage_training(data_dir, model_dir, train_cfg, logs_dir,
-                                       f"train_{stage_name}",
-                                       start_checkpoint=prev_checkpoint,
-                                       init_iterations=10, gpu=gpu)
-        prev_checkpoint = find_checkpoint(model_dir, final_iter)
-        final_model = model_dir
-
-        # Cleanup
-        img_dir = data_dir / "images"
-        if img_dir.exists():
-            shutil.rmtree(img_dir)
+            # Cleanup this stage's images once its training has consumed them.
+            img_dir = data_dir / "images"
+            if img_dir.exists():
+                shutil.rmtree(img_dir)
 
     return final_model, final_iter
 
@@ -419,6 +462,12 @@ def run_n_blocks(n_blocks, output_dir, shared_data, gpu=0, num_gpus=1,
                 model_dir, iteration = fut.result()
                 block_models[bi] = (model_dir, iteration)
                 print(f"  Block {bi} done: {iteration} iterations")
+
+    # Signal to the AE scheduler that the multi-GPU block-training phase is
+    # complete. Everything after this (merge / eval / finetune) runs on the
+    # single base GPU, so the scheduler can release the other GPUs to the
+    # 7/8/14 quality-metric pool while this finetune tail runs.
+    (run_dir / "blocktrain_done").touch()
 
     # Merge
     print(f"\n[4] Merging {n_blocks} blocks...")

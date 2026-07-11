@@ -178,13 +178,18 @@ then runs `verify_results.py --ae`. Three levers keep it inside the budget:
   quality metrics run *in parallel*:
   1. *Isolated* — **EXP-1** solo (full CPU cores) for a clean single-block
      end-to-end train time (`end_to_end_train_min`) + the E25 model 6/7/8/14 need.
-  2. *Parallel* — **EXP-4/7/8/14** quality metrics across all GPUs, each capped to
-     `cores // num_gpus` CPU threads so concurrent ParaView renders don't thrash
-     the CPU.
+  2. *Mixed* — **EXP-4** takes **all** GPUs for its block-training round (4 blocks
+     → 4 GPUs is one round, not two), pipelining each block's stage-*k+1* GT
+     render (CPU) against its stage-*k* training (GPU). The moment block-training
+     ends it releases the non-base GPUs to the **EXP-7/8/14** pool, which runs
+     concurrently with EXP-4's single-GPU merge/finetune tail so no GPU sits idle.
+     Each process is capped to `cores // num_gpus` CPU threads so concurrent
+     ParaView renders don't thrash the CPU.
   3. *Isolated* — **EXP-6** (FPS + the enforced speedup) then **EXP-11**
      (finetune time, peak memory), one at a time, node otherwise idle.
-  Per-experiment logs land in `runs/ae_logs/`. `PARTICLEGS_AE_EXP4_GPUS=N`
-  overrides EXP-4's GPU count for A/B tuning.
+  As each experiment finishes, its headline metrics are printed vs the paper's
+  reference values (PASS/FAIL), with a running progress bar. Per-experiment logs
+  land in `runs/ae_logs/`.
 
 Estimated wall-clock is **hardware-dependent**; on a 4× A100 node expect roughly
 **~6–8 h** (the isolated timing segments deliberately leave GPUs idle for clean

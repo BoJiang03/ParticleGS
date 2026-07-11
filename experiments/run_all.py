@@ -28,6 +28,7 @@ Experiment dependency graph:
 """
 
 import argparse
+import json
 import math
 import os
 import subprocess
@@ -71,6 +72,103 @@ NEEDS_EXP1 = {6, 7, 8, 14}
 
 # Approximate cold single-GPU wall-clock (min), for longest-first pool ordering.
 _COLD_COST_MIN = {13: 68, 7: 52, 11: 52, 6: 32, 8: 11, 14: 11, 1: 80, 4: 150}
+
+# Metric-path prefixes not enforced in the AE fast path (mirrors verify --ae).
+AE_SKIP_PREFIXES = ("exp_fire2.", "exp4.blocks_2.")
+
+
+# ── Reviewer-facing progress + per-experiment result digest ─────────────────
+# The AE run launches experiments as background subprocesses that log to files,
+# so the top-level terminal would otherwise be quiet for hours. These helpers
+# keep the reviewer oriented: overall progress, a heartbeat for long-running
+# experiments, and — the moment each experiment finishes — a compact PASS/FAIL
+# digest of its enforced metrics against the paper's reference values, plus
+# pointers to the results.json and log to inspect.
+
+_PROGRESS = {"t0": None, "total": 0, "done": 0}
+
+
+def _fmt_dur(seconds):
+    m = int(seconds // 60)
+    if m < 60:
+        return f"{m}m"
+    return f"{m // 60}h{m % 60:02d}m"
+
+
+def _print_progress(tail=""):
+    if not _PROGRESS["t0"]:
+        return
+    el = time.time() - _PROGRESS["t0"]
+    bar_n = _PROGRESS["total"] or 1
+    filled = int(round(20 * _PROGRESS["done"] / bar_n))
+    bar = "#" * filled + "." * (20 - filled)
+    print(f"  [progress] [{bar}] {_PROGRESS['done']}/{_PROGRESS['total']} "
+          f"experiments done | elapsed {_fmt_dur(el)}{tail}")
+
+
+_REF_CACHE = {}
+
+
+def _load_reference():
+    if "ref" not in _REF_CACHE:
+        p = PARTICLEGS_ROOT / "reference_results.json"
+        _REF_CACHE["ref"] = json.loads(p.read_text()) if p.exists() else None
+    return _REF_CACHE["ref"]
+
+
+def _digest_experiment(exp_num):
+    """Print a compact PASS/FAIL digest of one experiment's enforced metrics
+    the moment it finishes, so reviewers see the headline numbers (and whether
+    they match the paper) without waiting for the final verify pass."""
+    ref = _load_reference()
+    if ref is None:
+        return
+    # Reuse verify_results as the single source of truth for tolerance logic.
+    if str(PARTICLEGS_ROOT) not in sys.path:
+        sys.path.insert(0, str(PARTICLEGS_ROOT))
+    try:
+        import verify_results as vr
+    except Exception:
+        return
+
+    exp_name = f"exp{exp_num}"
+    metrics = [m for m in ref["metrics"]
+               if m["path"].split(".", 1)[0] == exp_name
+               and not m["path"].startswith(AE_SKIP_PREFIXES)]
+    if not metrics:
+        return
+
+    res_path = RUNS_DIR / exp_name / "results.json"
+    log_hint = RUNS_DIR / "ae_logs" / f"{exp_name}.log"
+    if not res_path.exists():
+        print(f"  └─ EXP-{exp_num} produced no results.json "
+              f"(see {log_hint}) — metrics will show MISSING in verify")
+        return
+    data = json.loads(res_path.read_text())
+
+    print(f"  ┌─ EXP-{exp_num} results vs paper "
+          f"({len(metrics)} enforced metric{'s' if len(metrics) != 1 else ''}):")
+    for m in metrics:
+        inner = m["path"].split(".", 1)[1]
+        actual = vr.get_nested(data, inner)
+        unit = m.get("unit", "")
+        cls = m["class"]
+        short = m["path"].split(".", 1)[1]
+        if cls == "hw_independent":
+            ok, _ = vr.check_hw_independent(actual, m.get("expected"),
+                                            m.get("tolerance_abs"),
+                                            m.get("tolerance_rel"))
+            tag = "PASS" if ok else "FAIL"
+        elif cls == "trend":
+            ok, _ = vr.check_trend(actual, m.get("trend_rule", "gt"),
+                                   m.get("trend_threshold", 0))
+            tag = "PASS" if ok else "FAIL"
+        else:  # hw_dependent — reported only, never scored
+            tag = "INFO"
+        av = vr.format_val(actual, unit)
+        ev = vr.format_val(m.get("expected"), unit)
+        print(f"  │   [{tag}] {short:<38} {av:>12}  (paper {ev})")
+    print(f"  └─ details: {res_path}   log: {log_hint}")
 
 
 def _exp_cmd(exp_num, gpu, extra_args, skip_data_prep):
@@ -142,9 +240,27 @@ def _reap(job, results):
     ok = rc == 0
     results[job["num"]] = ok
     el = (time.time() - job["t0"]) / 60
-    print(f"  [ done ] EXP-{job['num']:<2d} {'OK' if ok else 'FAILED'} "
+    _PROGRESS["done"] += 1
+    print(f"\n  [ done ] EXP-{job['num']:<2d} {'OK' if ok else 'FAILED'} "
           f"({el:.1f} min, GPU {job['gpu']})")
+    _digest_experiment(job["num"])
+    _print_progress()
     return ok
+
+
+_HEARTBEAT = {"last": 0.0}
+
+
+def _heartbeat(running, interval=120):
+    """Every `interval` seconds, print which experiments are still running and
+    for how long — so the terminal isn't silent during multi-hour experiments."""
+    now = time.time()
+    if not running or now - _HEARTBEAT["last"] < interval:
+        return
+    _HEARTBEAT["last"] = now
+    parts = [f"EXP-{j['num']} ({_fmt_dur(now - j['t0'])}, GPU {j['gpu']})"
+             for j in sorted(running, key=lambda j: j["num"])]
+    _print_progress(tail=f" | running: {', '.join(parts)}")
 
 
 def _run_pool(exp_nums, gpus, logdir, results):
@@ -159,6 +275,7 @@ def _run_pool(exp_nums, gpus, logdir, results):
             skip_prep = num not in SELF_PREP_EXPERIMENTS
             running.append(_spawn(num, gpu, [], skip_prep, logdir / f"exp{num}.log"))
         time.sleep(5)
+        _heartbeat(running)
         still = []
         for job in running:
             if job["proc"].poll() is None:
@@ -181,40 +298,56 @@ ISOLATED_TIMING = [1, 6, 11]
 PARALLEL_METRIC = [4, 7, 8, 14]
 
 
-def _run_ae_pool(exp_nums, gpus, ae_quick, cpu_env, logdir, results):
-    """Parallel pool for the quality-metric segment. EXP-4 reserves the fewest
-    GPUs for its block round count (freeing the rest); 7/8/14 are single-GPU.
-    All get the shared CPU-thread cap so concurrent ParaView renders don't
-    oversubscribe the CPU."""
-    num_gpus = len(gpus)
-    free = list(gpus)
+def _run_ae_seg2(exp_nums, gpus, ae_quick, cpu_env, logdir, results):
+    """Segment 2 (quality metrics): give EXP-4 every GPU for its parallel block-
+    training round (4 blocks -> 4 GPUs = one round instead of two), then, the
+    moment EXP-4 signals `blocktrain_done` and drops into its single-GPU
+    merge/eval/finetune tail, release the non-base GPUs to the EXP-7/8/14 pool so
+    they run concurrently with that tail instead of the GPUs sitting idle.
+
+    EXP-4 pins its tail to the base GPU (gpus[0]); 7/8/14 take gpus[1:]. All
+    share the CPU-thread cap so concurrent ParaView renders (EXP-4's finetune
+    render + the pool's GT renders) don't oversubscribe the CPU. If EXP-4 isn't
+    in this segment, 7/8/14 simply pool across all GPUs."""
+    base = gpus[0]
+    others = gpus[1:]
     running = []
+    exp4_job = None
 
     if 4 in exp_nums:
         blocks = "4" if ae_quick else "2,4"
-        override = os.environ.get("PARTICLEGS_AE_EXP4_GPUS")
-        if override:
-            k4 = max(1, min(num_gpus, int(override)))
-        elif num_gpus > 1:
-            n_blk = max(int(x) for x in blocks.split(","))
-            rounds = math.ceil(n_blk / (num_gpus - 1))
-            k4 = max(1, math.ceil(n_blk / rounds))
+        n_blk = max(int(x) for x in blocks.split(","))
+        marker = RUNS_DIR / "exp4" / f"blocks_{n_blk}" / "blocktrain_done"
+        marker.unlink(missing_ok=True)  # clear any stale signal from a prior run
+        print(f"  EXP-4 takes all {len(gpus)} GPUs for {n_blk}-block training; "
+              f"GPUs {others} free up for EXP-7/8/14 once block-training ends.")
+        exp4_job = _spawn(4, base, ["--num_gpus", str(len(gpus)), "--blocks", blocks],
+                          True, logdir / "exp4.log", gpus_held=list(gpus), env=cpu_env)
+        # Hold all GPUs until EXP-4 finishes block-training (marker) or exits.
+        while exp4_job["proc"].poll() is None and not marker.exists():
+            time.sleep(5)
+            _heartbeat([exp4_job])
+        if exp4_job["proc"].poll() is not None:
+            _reap(exp4_job, results)          # cached/failed before the marker
+            exp4_job = None
+            free = list(gpus)
         else:
-            k4 = num_gpus
-        e4 = free[:k4]
-        free = free[k4:]
-        running.append(_spawn(4, e4[0], ["--num_gpus", str(k4), "--blocks", blocks],
-                              True, logdir / "exp4.log", gpus_held=e4, env=cpu_env))
+            print(f"\n  [pool] EXP-4 block-training done — releasing GPUs {others} "
+                  f"to the EXP-7/8/14 pool while EXP-4 finetunes on GPU {base}")
+            free = list(others)               # base stays with EXP-4's tail
+    else:
+        free = list(gpus)
 
     queue = sorted([n for n in exp_nums if n != 4],
                    key=lambda n: -_COLD_COST_MIN.get(n, 30))
-    while queue or running:
+    while queue or running or exp4_job is not None:
         while queue and free:
             num = queue.pop(0)
             gpu = free.pop(0)
             running.append(_spawn(num, gpu, [], True, logdir / f"exp{num}.log",
                                   gpus_held=[gpu], env=cpu_env))
         time.sleep(5)
+        _heartbeat(running + ([exp4_job] if exp4_job else []))
         still = []
         for job in running:
             if job["proc"].poll() is None:
@@ -223,6 +356,11 @@ def _run_ae_pool(exp_nums, gpus, ae_quick, cpu_env, logdir, results):
             _reap(job, results)
             free.extend(job["gpus_held"])
         running = still
+        # EXP-4's single-GPU tail: when it finishes, its base GPU rejoins the pool.
+        if exp4_job is not None and exp4_job["proc"].poll() is not None:
+            _reap(exp4_job, results)
+            free.append(base)
+            exp4_job = None
 
 
 def run_ae_parallel(exp_nums, num_gpus, ae_quick, logdir):
@@ -230,9 +368,12 @@ def run_ae_parallel(exp_nums, num_gpus, ae_quick, logdir):
 
       Segment 1 (isolated): EXP-1 solo, full CPU cores — clean single-block
                             end-to-end train time + the E25 model 6/7/8/14 need.
-      Segment 2 (parallel): EXP-4/7/8/14 quality metrics across all GPUs, each
-                            capped to cores//num_gpus threads so concurrent
-                            ParaView renders (CPU-heavy) don't thrash the CPU.
+      Segment 2 (mixed):    EXP-4 takes ALL GPUs for its block-training round,
+                            then releases the non-base GPUs to the EXP-7/8/14
+                            quality-metric pool while its single-GPU finetune
+                            tail runs — every GPU stays busy. Each proc is capped
+                            to cores//num_gpus threads so concurrent ParaView
+                            renders (CPU-heavy) don't thrash the CPU.
       Segment 3 (isolated): EXP-6 then EXP-11, one at a time, node otherwise
                             idle, full cores — valid FPS / finetune-time / memory.
 
@@ -249,9 +390,22 @@ def run_ae_parallel(exp_nums, num_gpus, ae_quick, logdir):
     full_env = _cpu_env(cores)                          # isolated: all cores
     par_env = _cpu_env(max(1, cores // max(1, num_gpus)))  # parallel: share cores
 
+    _PROGRESS["t0"] = time.time()
+    _PROGRESS["total"] = len([n for n in exp_nums if n in ALL_EXPERIMENTS])
+    _PROGRESS["done"] = 0
+
+    seg2 = [n for n in exp_nums if n in PARALLEL_METRIC]
+    seg3 = [n for n in ISOLATED_TIMING if n != 1 and n in exp_set]
+    print(f"\nSchedule ({num_gpus} GPUs, {cores} CPU cores):")
+    print(f"  Segment 1 [isolated]: EXP-1"
+          f"{' (quick)' if ae_quick else ''} — end-to-end train time + E25 model")
+    print(f"  Segment 2 [mixed]:    {seg2 or '(none)'} — EXP-4 all-GPU block train, "
+          f"then 7/8/14 overlap its finetune tail")
+    print(f"  Segment 3 [isolated]: {seg3 or '(none)'} — clean FPS / time / memory")
+
     # ---- Segment 1: EXP-1 isolated ----
     if 1 in exp_set:
-        print(f"\n{'='*70}\n=== AE Segment 1 (isolated): EXP-1 solo — clean "
+        print(f"\n{'='*70}\n=== AE Segment 1/3 (isolated): EXP-1 solo — clean "
               f"end-to-end train time + E25 model ===\n{'='*70}")
         job = _spawn(1, gpus[0], (["--ae"] if ae_quick else []), True,
                      logdir / "exp1.log", env=full_env)
@@ -259,19 +413,18 @@ def run_ae_parallel(exp_nums, num_gpus, ae_quick, logdir):
         if not results.get(1, False):
             print("  WARNING: EXP-1 failed; EXP-6/7/8/14 depend on its model.")
 
-    # ---- Segment 2: parallel quality-metric experiments ----
-    seg2 = [n for n in exp_nums if n in PARALLEL_METRIC]
+    # ---- Segment 2: EXP-4 all-GPU block train, then 7/8/14 overlap the tail ----
     if seg2:
-        print(f"\n{'='*70}\n=== AE Segment 2 (parallel): {seg2} across {num_gpus} "
+        print(f"\n{'='*70}\n=== AE Segment 2/3 (mixed): {seg2} across {num_gpus} "
               f"GPUs (CPU cap {max(1, cores // max(1, num_gpus))} threads/proc) "
               f"===\n{'='*70}")
-        _run_ae_pool(seg2, gpus, ae_quick, par_env, logdir, results)
+        _run_ae_seg2(seg2, gpus, ae_quick, par_env, logdir, results)
 
     # ---- Segment 3: isolated timing/perf experiments, one at a time ----
     for n in ISOLATED_TIMING:
         if n == 1 or n not in exp_set:
             continue
-        print(f"\n{'='*70}\n=== AE Segment 3 (isolated): EXP-{n} solo — valid "
+        print(f"\n{'='*70}\n=== AE Segment 3/3 (isolated): EXP-{n} solo — valid "
               f"timing/perf ===\n{'='*70}")
         job = _spawn(n, gpus[0], [], True, logdir / f"exp{n}.log", env=full_env)
         _reap(job, results)
@@ -332,6 +485,9 @@ def main():
         results = run_ae_parallel(exp_nums, args.num_gpus, args.ae, logdir)
     else:
         results = {}
+        _PROGRESS["t0"] = time.time()
+        _PROGRESS["total"] = len([n for n in exp_nums if n in ALL_EXPERIMENTS])
+        _PROGRESS["done"] = 0
         for num in exp_nums:
             if num not in ALL_EXPERIMENTS:
                 print(f"WARNING: Unknown experiment EXP-{num}, skipping")
@@ -346,6 +502,10 @@ def main():
             ok = run_experiment(num, module, desc, args.gpu, extra_args=extra,
                                 skip_data_prep=num not in SELF_PREP_EXPERIMENTS)
             results[num] = ok
+            _PROGRESS["done"] += 1
+            if args.ae:
+                _digest_experiment(num)
+            _print_progress()
 
     # Summary
     total_time = time.time() - t0_total
@@ -361,6 +521,22 @@ def main():
     print(f"\n{n_ok}/{len(results)} experiments OK")
     print(f"Total time: {total_time/3600:.1f} hours")
     print(f"Results directory: {RUNS_DIR}")
+
+    # Guide the reviewer to the next step: the aggregated tables + the metric
+    # verification that decides AE pass/fail.
+    if args.ae:
+        print(f"\nNext:")
+        print(f"  • Per-experiment numbers vs paper were printed above as each "
+              f"experiment finished.")
+        print(f"  • Per-experiment logs:  {RUNS_DIR / 'ae_logs'}/exp*.log")
+        print(f"  • Aggregated tables:    {RUNS_DIR / 'summary'}/  "
+              f"(scripts/aggregate_results.py)")
+        print(f"  • Final verification:   python verify_results.py --ae  "
+              f"(the 19 enforced AE metrics)")
+        if not results.get(1, True):
+            print(f"  ! EXP-1 FAILED — EXP-6/7/8/14 depend on its E25 model and "
+                  f"will report MISSING. Re-run after fixing EXP-1.")
+
     # Non-zero exit if any experiment failed, so wrappers can detect it.
     if any(not v for v in results.values()):
         sys.exit(1)

@@ -21,8 +21,14 @@
 #      (SZ3 #13, LCP #8, E25) are computed; the rest of the 15+11 SZ3/LCP
 #      sweep — which exists only to draw the paper's R-D curve — is skipped.
 #      EXP-1 drops from ~350 min to ~80 min. Verification still passes.
-#   2. Parallel scheduling: EXP-4 (block training) and EXP-1 overlap on
-#      disjoint GPU sets, then EXP-6/7/8/11/13/14 are pooled across all GPUs.
+#   2. Three-segment scheduling (parallelize what can be, isolate what can't):
+#        Seg 1 [isolated]: EXP-1 solo    -> clean end-to-end train time + E25.
+#        Seg 2 [mixed]:    EXP-4 takes all GPUs for its block-training round,
+#                          then releases the non-base GPUs to the EXP-7/8/14
+#                          pool while its finetune tail runs on the base GPU.
+#        Seg 3 [isolated]: EXP-6 then EXP-11 solo -> clean FPS / time / memory.
+#      Timing/FPS/memory metrics (EXP-1/6/11) are measured on an otherwise-idle
+#      node; deterministic quality metrics (EXP-4/7/8/14) run in parallel.
 #
 # Estimated wall-clock (cold, from raw data):
 #   4× A100 / RTX PRO 6000 : ~5 h        (recommended AE node)
