@@ -16,6 +16,10 @@
 #     graphics GPU, hours on a render-bound A100) — is skipped in favor of the
 #     shipped E25, which EXP-1/6/7/8/11/14 consume. ONLY models are shipped; all
 #     ground truth (training and eval) is still rendered live on your node.
+#     (To OBSERVE the skipped single-block E25 training cost live, run
+#      scripts/reproduce_ae_single_block.sh — but see its banner: the paper's
+#      training TIME is graphics-hardware-specific, so contact the authors to run
+#      it on the authors' workstation for the accurate number.)
 #   * EXP-13 (FIRE-2 full retrain) and EXP-4's 2-block config are skipped
 #     (4-block only). The LCP baseline is skipped — it is strictly worse than
 #     SZ3, so the iso-CR comparison only needs 3DGS vs SZ3.
@@ -100,7 +104,7 @@ while [[ $# -gt 0 ]]; do
         --eval-only) EVAL_ONLY=1; shift ;;
         --no-verify) VERIFY=0; shift ;;
         --no-setup) SETUP=0; shift ;;
-        -h|--help) sed -n '2,80p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,84p' "$0"; exit 0 ;;
         *) echo "unknown arg: $1" >&2; exit 1 ;;
     esac
 done
