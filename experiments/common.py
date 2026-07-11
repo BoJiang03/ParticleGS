@@ -904,4 +904,9 @@ def base_parser(description):
                         help="Override output directory")
     parser.add_argument("--skip_data_prep", action="store_true",
                         help="Skip shared data preparation (assume exists)")
+    parser.add_argument("--ae", action="store_true",
+                        help="AE mode: reduce report-only sampling (eval/FPS "
+                             "frames, redundant profiling reruns) to fit the SC "
+                             "AE budget. Never changes enforced metrics; left off "
+                             "by full reproduce.sh.")
     return parser

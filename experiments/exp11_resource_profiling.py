@@ -491,6 +491,28 @@ def measure_finetune_cost(shared_data, output_dir, logs_dir, gpu=0):
     return result
 
 
+def _read_exp4_timing():
+    """AE piggyback: merge + 60k-finetune wall-clock already measured by EXP-4 and
+    recorded in its result.json — read it instead of re-running merge and a SECOND
+    60k finetune here (EXP-11's single biggest redundancy). Also robust to the AE
+    fast path, where the per-block dirs don't exist (blocks were shipped, not
+    trained) so measure_merge_cost / measure_finetune_cost couldn't find them.
+    Returns (merge_min, finetune_min, n_blocks) or (None, None, None)."""
+    for n in (8, 4, 2):
+        rf = RUNS_DIR / "exp4" / f"blocks_{n}" / "result.json"
+        if not rf.exists():
+            continue
+        try:
+            d = json.loads(rf.read_text())
+        except Exception:
+            continue
+        ft = d.get("finetuned", {}).get("finetune_time_min")
+        mt = d.get("merged", {}).get("merge_time_min")
+        if ft is not None:
+            return mt, ft, n
+    return None, None, None
+
+
 # ── Main ─────────────────────────────────────────────────────────────────
 
 def main():
@@ -602,17 +624,31 @@ def main():
 
     # ── 6. Merge cost ────────────────────────────────────────────────────
     print("\n" + "="*70)
-    print("[6] Merge Cost (8 blocks)")
+    print("[6] Merge Cost")
     print("="*70)
-    results["merge_cost"] = measure_merge_cost(output_dir, logs)
+    ae_mt, ae_ft, ae_nb = _read_exp4_timing() if args.ae else (None, None, None)
+    if args.ae and ae_mt is not None:
+        print(f"  [piggyback] reuse EXP-4 {ae_nb}-block merge: {ae_mt:.2f} min")
+        results["merge_cost"] = {"n_blocks": ae_nb, "merge_time_min": ae_mt,
+                                 "source": "exp4-piggyback"}
+    else:
+        results["merge_cost"] = measure_merge_cost(output_dir, logs)
 
     # ── 7. Finetune cost ─────────────────────────────────────────────────
     if not args.skip_finetune:
         print("\n" + "="*70)
         print("[7] Finetune Cost (60k iterations)")
         print("="*70)
-        results["finetune_cost"] = measure_finetune_cost(
-            shared_data, output_dir, logs, gpu=args.gpu)
+        if args.ae and ae_ft is not None:
+            # Reuse EXP-4's 60k finetune timing instead of running a SECOND 60k
+            # finetune — the single biggest EXP-11 redundancy.
+            print(f"  [piggyback] reuse EXP-4 {ae_nb}-block 60k finetune: {ae_ft:.1f} min")
+            results["finetune_cost"] = {"n_blocks": ae_nb, "finetune_time_min": ae_ft,
+                                        "finetune_time_s": round(ae_ft * 60, 1),
+                                        "iterations": 60000, "source": "exp4-piggyback"}
+        else:
+            results["finetune_cost"] = measure_finetune_cost(
+                shared_data, output_dir, logs, gpu=args.gpu)
     else:
         print("\n[7] Skipped finetune timing")
 

@@ -600,10 +600,9 @@ def main():
                         help="Skip LCP baseline")
     parser.add_argument("--only_lcp", action="store_true",
                         help="Only run LCP baseline")
-    parser.add_argument("--ae", action="store_true",
-                        help="AE quick mode: compute only the enforced R-D points "
-                             "(SZ3 #13, LCP #8) + E25; skip the rest of the sweep "
-                             "(~350min -> ~80min). Verification still passes.")
+    # --ae is provided by base_parser: quick mode computes only the enforced R-D
+    # points (SZ3 #13 + E25; LCP dropped in AE, see run_exp1c gate) and skips the
+    # rest of the sweep (~350min -> ~70min). Verification still passes.
     args = parser.parse_args()
     set_pvbatch_cuda_device(args.gpu)  # pin this process's GT renders to its GPU
 

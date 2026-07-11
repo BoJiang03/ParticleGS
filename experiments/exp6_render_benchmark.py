@@ -19,8 +19,15 @@ from pathlib import Path
 from experiments.common import *
 
 
-def benchmark_paraview_fps(vtp_path, norm_path, output_dir, logs_dir):
-    """Run pure ParaView render FPS benchmark via pvbatch."""
+def benchmark_paraview_fps(vtp_path, norm_path, output_dir, logs_dir,
+                           n_frames=80, warmup=10):
+    """Run pure ParaView render FPS benchmark via pvbatch.
+
+    FPS is a rate, so a smaller frame count still measures it (the report-only
+    3dgs_fps/paraview_fps and the enforced speedup ratio are both stable under
+    fewer frames). AE mode passes a reduced count to save the 280M-particle
+    ParaView renders that dominate this experiment.
+    """
     result_file = output_dir / "pv_fps.json"
     if result_file.exists():
         print("  [Skip] ParaView FPS results exist")
@@ -31,7 +38,7 @@ def benchmark_paraview_fps(vtp_path, norm_path, output_dir, logs_dir):
         "--vtp_path", str(vtp_path),
         "--normalization", str(norm_path),
         "--width", "1920", "--height", "1080",
-        "--n_frames", "80", "--warmup", "10",
+        "--n_frames", str(n_frames), "--warmup", str(warmup),
         "--orbit_radii", "1.0,0.7,0.5",
         "--output", str(result_file),
     ]
@@ -111,8 +118,12 @@ def main():
     print("\n" + "="*70)
     print("ParaView Pure Render FPS (280M particles, 1080p)")
     print("="*70)
+    # AE mode: fewer frames — FPS is a rate, so 24/6 measures it as well as 80/10
+    # but skips ~70% of the 280M-particle ParaView renders that dominate EXP-6.
+    fps_frames, fps_warmup = (24, 6) if args.ae else (80, 10)
     pv_results = benchmark_paraview_fps(
-        shared_data["vtp"], shared_data["normalization"], output_dir, logs)
+        shared_data["vtp"], shared_data["normalization"], output_dir, logs,
+        n_frames=fps_frames, warmup=fps_warmup)
     results["paraview"] = pv_results
 
     # ── 3DGS CUDA rasterizer pure render FPS ──────────────────────────────

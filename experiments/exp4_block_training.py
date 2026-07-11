@@ -535,8 +535,10 @@ def run_n_blocks(n_blocks, output_dir, shared_data, gpu=0, num_gpus=1,
 
     # Merge
     print(f"\n[4] Merging {n_blocks} blocks...")
+    _merge_t0 = time.time()
     merged_dir = merge_blocks(block_models, block_run_dirs,
                               shared_data["normalization"], run_dir, logs)
+    merge_time_min = round((time.time() - _merge_t0) / 60, 2)
 
     # Evaluate merged — find actual iteration from PLY
     merged_pc = Path(merged_dir) / "point_cloud"
@@ -549,7 +551,9 @@ def run_n_blocks(n_blocks, output_dir, shared_data, gpu=0, num_gpus=1,
 
     # Finetune
     print(f"\n[6] Finetuning merged model...")
+    _ft_t0 = time.time()
     ft_model, ft_iter = finetune_merged(merged_dir, shared_data, run_dir, logs, gpu)
+    finetune_time_min = round((time.time() - _ft_t0) / 60, 2)
 
     # Evaluate finetuned (use F16 VizMapper params)
     print(f"\n[7] Evaluating finetuned model...")
@@ -567,6 +571,7 @@ def run_n_blocks(n_blocks, output_dir, shared_data, gpu=0, num_gpus=1,
             "psnr": merged_eval["avg"]["psnr"],
             "num_gaussians": merged_stats["num_gaussians"],
             "size_mb": round(merged_stats["size_mb"], 1),
+            "merge_time_min": merge_time_min,
             "eval": merged_eval,
         },
         "finetuned": {
@@ -574,6 +579,7 @@ def run_n_blocks(n_blocks, output_dir, shared_data, gpu=0, num_gpus=1,
             "psnr": ft_eval["avg"]["psnr"],
             "num_gaussians": ft_stats["num_gaussians"],
             "size_mb": round(ft_stats["size_mb"], 1),
+            "finetune_time_min": finetune_time_min,
             "eval": ft_eval,
         },
     }

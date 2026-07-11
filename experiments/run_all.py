@@ -447,7 +447,8 @@ def run_ae_parallel(exp_nums, num_gpus, ae_quick, logdir):
             continue
         print(f"\n{'='*70}\n=== AE Segment 3/3 (isolated): EXP-{n} solo — valid "
               f"timing/perf ===\n{'='*70}")
-        job = _spawn(n, gpus[0], [], True, logdir / f"exp{n}.log", env=full_env)
+        job = _spawn(n, gpus[0], (["--ae"] if ae_quick else []), True,
+                     logdir / f"exp{n}.log", env=full_env)
         _reap(job, results)
 
     return results
@@ -514,12 +515,13 @@ def main():
                 print(f"WARNING: Unknown experiment EXP-{num}, skipping")
                 continue
             module, desc = ALL_EXPERIMENTS[num]
-            extra = []
-            if num == 1 and args.ae:
-                extra = ["--ae"]
+            # AE mode passes --ae to every experiment (report-only reductions;
+            # no-op where unused). Full reproduce.sh leaves args.ae False -> extra
+            # stays empty here and EXP-4 keeps blocks "2,4" with no pretrained.
+            extra = ["--ae"] if args.ae else []
             if num == 4:
                 blocks = "4" if args.ae else "2,4"
-                extra = ["--num_gpus", str(args.num_gpus), "--blocks", blocks]
+                extra += ["--num_gpus", str(args.num_gpus), "--blocks", blocks]
                 if args.ae:
                     extra.append("--use_pretrained_blocks")  # 1+4+1 → 1+1
             ok = run_experiment(num, module, desc, args.gpu, extra_args=extra,
