@@ -287,9 +287,11 @@ def run_exp1a(output_dir, shared_data, ae=False):
     headers = ["EB", "CR", "Avg PSNR", "Avg Masked"]
     rows = []
     for r in results:
+        if r.get("skipped_ae"):
+            continue  # AE-quick placeholder (cr/psnr are None) — not a real point
         rows.append([
             f"{r['eb']:.2e}",
-            f"{r['cr']:.1f}x",
+            f"{r['cr']:.1f}x" if r["cr"] else "N/A",
             f"{r['avg_psnr']:.2f}" if r["avg_psnr"] else "N/A",
             f"{r['avg_masked_psnr']:.2f}" if r["avg_masked_psnr"] else "N/A",
         ])
@@ -574,9 +576,11 @@ def run_exp1c(output_dir, shared_data, ae=False):
     headers = ["EB", "CR", "Avg PSNR", "Avg Masked"]
     rows = []
     for r in results:
+        if r.get("skipped_ae"):
+            continue  # AE-quick placeholder (cr/psnr are None) — not a real point
         rows.append([
             f"{r['eb']:.2e}",
-            f"{r['cr']:.1f}x",
+            f"{r['cr']:.1f}x" if r["cr"] else "N/A",
             f"{r['avg_psnr']:.2f}" if r["avg_psnr"] else "N/A",
             f"{r['avg_masked_psnr']:.2f}" if r["avg_masked_psnr"] else "N/A",
         ])
