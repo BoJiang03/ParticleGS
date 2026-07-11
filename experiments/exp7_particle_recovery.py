@@ -119,39 +119,45 @@ def run_exp7b(output_dir, shared_data, gpu):
     logs.mkdir(parents=True, exist_ok=True)
     results = []
 
+    # Fixed block-count positions so reference_results.json's exp7.7b.<i> stays
+    # stable regardless of which counts are actually trained: the AE fast path
+    # trains only the 4-block model, the full run trains 2+4, and 8/16 are never
+    # trained. A skipped/absent count gets an index-preserving placeholder so the
+    # 4-block recovery always lands at index 2 (== the enforced exp7.7b.2), just
+    # like exp1's _ae_placeholder keeps the SZ3 sweep indices stable.
     for n_blocks in [1, 2, 4, 8, 16]:
-        # Find model from EXP-4
+        # Find model from EXP-4 (or EXP-1's E25 for the 1-block case)
         if n_blocks == 1:
             model_base = RUNS_DIR / "exp1" / "e25" / "02_S3_mix_6k" / "model"
         else:
             model_base = RUNS_DIR / "exp4" / f"blocks_{n_blocks}" / "finetuned" / "model"
 
-        if not model_base.exists():
-            print(f"  [Skip] No model for {n_blocks} blocks")
-            continue
+        chk = find_checkpoint(model_base) if model_base.exists() else None
+        ply = None
+        if chk:
+            iteration = int(chk.stem.replace("chkpnt", ""))
+            cand = model_base / "point_cloud" / f"iteration_{iteration}" / "point_cloud.ply"
+            ply = cand if cand.exists() else None
 
-        chk = find_checkpoint(model_base)
-        if not chk:
-            continue
-        iteration = int(chk.stem.replace("chkpnt", ""))
-        ply = model_base / "point_cloud" / f"iteration_{iteration}" / "point_cloud.ply"
-        if not ply.exists():
+        if ply is None:
+            print(f"  [Skip] No model for {n_blocks} blocks — index placeholder")
+            results.append({"n_blocks": n_blocks, "skipped": True})
             continue
 
         print(f"\n  {n_blocks} blocks...")
         r = run_recovery(ply, output_dir / "7b" / f"blocks_{n_blocks}",
                          num_particles=NUM_PARTICLES, method="V0_baseline",
                          logs_dir=logs)
-        if r:
-            results.append({"n_blocks": n_blocks, **r})
+        results.append({"n_blocks": n_blocks, **(r if r else {"skipped": True})})
 
-    if results:
+    real = [r for r in results if not r.get("skipped")]
+    if real:
         headers = ["Blocks", "Density Corr", "NN Mean", "NN Ratio"]
         rows = [[r["n_blocks"],
                  f"{r.get('density_field', {}).get('correlation', 0):.3f}",
                  f"{r.get('nn_distance', {}).get('rec_mean', 0):.3f}",
                  f"{r.get('nn_distance', {}).get('rec_mean', 0)/0.665:.2f}x"]
-                for r in results]
+                for r in real]
         print_table(headers, rows)
     return results
 
