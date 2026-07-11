@@ -28,6 +28,8 @@ Experiment dependency graph:
 """
 
 import argparse
+import math
+import os
 import subprocess
 import sys
 import time
@@ -173,14 +175,30 @@ def run_ae_parallel(exp_nums, num_gpus, ae_quick, logdir):
     running = []
     free = list(range(num_gpus))
 
-    # EXP-4 reserves the low GPUs for its entire duration.
+    # EXP-4 reserves the low GPUs for its entire duration. Give it the FEWEST
+    # GPUs that still achieve the same block-training round count it would get
+    # with num_gpus-1 — this frees the rest for the light-stream pool at zero
+    # cost to EXP-4's parallel phase. For 4 blocks on 4 GPUs: EXP-4 takes 2
+    # (blocks 0,1 then 2,3 = 2 rounds, same as 3 GPUs would give), leaving 2 for
+    # the pool. Combined with EXP-1 + EXP-11 that fills all 4 GPUs from the start
+    # instead of the 1-GPU light stream the old num_gpus-1 split produced.
+    # Override with PARTICLEGS_AE_EXP4_GPUS=N to A/B on the real node (e.g. N=4
+    # to make EXP-4's block phase a single round at the cost of pool overlap).
     e4_gpus = []
     if 4 in exp_set:
         reserve_e1 = (1 in exp_set) and num_gpus > 1
-        k4 = (num_gpus - 1) if reserve_e1 else num_gpus
+        blocks = "4" if ae_quick else "2,4"
+        override = os.environ.get("PARTICLEGS_AE_EXP4_GPUS")
+        if override:
+            k4 = max(1, min(num_gpus, int(override)))
+        elif reserve_e1:
+            n_blk = max(int(x) for x in blocks.split(","))   # 4 in AE mode
+            rounds = math.ceil(n_blk / (num_gpus - 1))
+            k4 = max(1, math.ceil(n_blk / rounds))
+        else:
+            k4 = num_gpus
         e4_gpus = free[:k4]
         free = free[k4:]
-        blocks = "4" if ae_quick else "2,4"
         running.append(_spawn(4, e4_gpus[0], ["--num_gpus", str(k4), "--blocks", blocks],
                               True, logdir / "exp4.log", gpus_held=e4_gpus))
 
