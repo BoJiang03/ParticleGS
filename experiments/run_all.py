@@ -87,7 +87,7 @@ NEEDS_EXP1 = {6, 7, 8, 14}
 _COLD_COST_MIN = {13: 68, 7: 52, 11: 52, 6: 32, 8: 11, 14: 11, 1: 80, 4: 150}
 
 # Metric-path prefixes not enforced in the AE fast path (mirrors verify --ae).
-AE_SKIP_PREFIXES = ("exp_fire2.", "exp4.blocks_2.")
+AE_SKIP_PREFIXES = ("exp_fire2.", "exp4.blocks_2.", "exp1.exp1c_lcp.")
 
 
 # ── Reviewer-facing progress + per-experiment result digest ─────────────────

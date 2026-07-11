@@ -114,9 +114,11 @@ def main():
                              "run_all.py --ae / scripts/reproduce_ae.sh.")
     args = parser.parse_args()
 
-    # Metric-path prefixes excluded from the AE fast path (the two render-heaviest
-    # units dropped to fit the SC AE ~8 h budget). See run_all.py AE_EXPERIMENTS.
-    AE_SKIP_PREFIXES = ("exp_fire2.", "exp4.blocks_2.")
+    # Metric-path prefixes excluded from the AE fast path. See run_all.py
+    # AE_EXPERIMENTS. Dropped to fit the SC AE budget: the two render-heaviest
+    # units (FIRE-2 full retrain, EXP-4 2-block config) and the LCP baseline
+    # (strictly worse than SZ3; the paper's iso-CR comparison only needs SZ3).
+    AE_SKIP_PREFIXES = ("exp_fire2.", "exp4.blocks_2.", "exp1.exp1c_lcp.")
 
     runs_dir = Path(args.runs_dir).resolve()
     ref = load_json(args.reference)

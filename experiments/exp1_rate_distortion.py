@@ -627,7 +627,10 @@ def main():
 
     run_sz3 = not args.skip_sz3 and not args.only_lcp
     run_3dgs = not args.skip_3dgs and not args.only_lcp
-    run_lcp = not args.skip_lcp or args.only_lcp
+    # AE drops the LCP baseline: it is strictly worse than SZ3, so the paper's
+    # iso-CR comparison only needs 3DGS vs SZ3. Full reproduce.sh (no --ae) still
+    # runs LCP. --only_lcp forces it either way.
+    run_lcp = (not args.skip_lcp and not args.ae) or args.only_lcp
 
     # EXP-1a: SZ3
     if run_sz3:
