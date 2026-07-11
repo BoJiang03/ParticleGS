@@ -158,21 +158,28 @@ If you have already built and activated the env yourself, skip that step with
 `--no-setup`. To build the env without running experiments, run
 `bash scripts/bootstrap_ae.sh` on its own.
 
-It reproduces the **same 26 enforced metrics** (all of EXP-1/4/6/7/8/11/13/14)
-and then runs `verify_results.py`, but is scheduled for the budget:
+It reproduces a **reduced set of 19 enforced metrics** (EXP-1/4/6/7/8/11/14) and
+then runs `verify_results.py --ae`. Three levers keep it inside the budget:
 
+- **Reduced set** — the two render-heaviest units are dropped from the fast path:
+  EXP-13 (FIRE-2 full retrain) and EXP-4's 2-block config (EXP-4 runs 4-block
+  only). That drops 7 of the 26 metrics; **all 26/26 remain reproducible via
+  `scripts/reproduce.sh`.**
+- **Rendering distributed across GPUs** — GT rendering (the dominant cost) is
+  pinned per experiment / per exp-4 block to its own GPU, instead of the former
+  behavior where every `pvbatch` render serialized onto CUDA 0. This is what
+  actually lets 4 GPUs help; before, `--num_gpus` only parallelized training.
 - **EXP-1 quick mode** — only the enforced rate-distortion points (SZ3 #13,
   LCP #8, E25) are computed; the remaining 15+11 SZ3/LCP sweep points, which
   exist only to draw the R-D *curve*, are skipped. EXP-1 drops ~350 → ~80 min.
-  (The verified numbers are identical; the curve figure is the only thing not
-  redrawn. Use `scripts/reproduce.sh` for the full sweep.)
-- **Parallel scheduling** — EXP-4 (block training) and EXP-1 overlap on disjoint
-  GPU sets, then EXP-6/7/8/11/13/14 are pooled across all GPUs. Per-experiment
-  logs land in `runs/ae_logs/`.
+- **Dependency-aware scheduling** — EXP-4 (the long pole) runs on the low GPUs
+  while EXP-1 then EXP-6/7/8/11/14 fill the rest; the EXP-1 dependents unlock the
+  moment EXP-1 finishes (no phase barrier). Per-experiment logs land in
+  `runs/ae_logs/`.
 
-Estimated wall-clock: **~5 h on 4 GPUs, ~8 h on 2 GPUs.** Needs ≥ 2 GPUs; on a
-single GPU use `scripts/reproduce.sh`. Add `--sequential` to disable parallel
-scheduling.
+Estimated wall-clock is **hardware-dependent**; on a 4× A100 node expect roughly
+**~5–7 h** for the reduced retrain. Needs ≥ 2 GPUs; on a single GPU use
+`scripts/reproduce.sh`. Add `--sequential` to disable parallel scheduling.
 
 **Eval-only fallback (~1–2 h, no training).** If you cannot retrain within
 budget, verify the reported numbers by re-rendering from the shipped model

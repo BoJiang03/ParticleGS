@@ -591,6 +591,7 @@ def main():
                              "(SZ3 #13, LCP #8) + E25; skip the rest of the sweep "
                              "(~350min -> ~80min). Verification still passes.")
     args = parser.parse_args()
+    set_pvbatch_cuda_device(args.gpu)  # pin this process's GT renders to its GPU
 
     output_dir = Path(args.output_dir) if args.output_dir else RUNS_DIR / "exp1"
     output_dir.mkdir(parents=True, exist_ok=True)

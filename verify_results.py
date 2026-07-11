@@ -107,7 +107,16 @@ def main():
                         help="Exit 1 on hw_independent or trend failures (default)")
     parser.add_argument("--no-strict", dest="strict", action="store_false",
                         help="Always exit 0 regardless of failures")
+    parser.add_argument("--ae", action="store_true",
+                        help="AE fast-path mode: enforce only the reduced set "
+                             "(skip EXP-13/FIRE-2 and EXP-4 2-block, which the "
+                             "full scripts/reproduce.sh run still covers). Matches "
+                             "run_all.py --ae / scripts/reproduce_ae.sh.")
     args = parser.parse_args()
+
+    # Metric-path prefixes excluded from the AE fast path (the two render-heaviest
+    # units dropped to fit the SC AE ~8 h budget). See run_all.py AE_EXPERIMENTS.
+    AE_SKIP_PREFIXES = ("exp_fire2.", "exp4.blocks_2.")
 
     runs_dir = Path(args.runs_dir).resolve()
     ref = load_json(args.reference)
@@ -131,6 +140,8 @@ def main():
 
     for m in ref["metrics"]:
         path = m["path"]
+        if args.ae and path.startswith(AE_SKIP_PREFIXES):
+            continue  # dropped from the AE fast path (covered by reproduce.sh)
         exp_name, inner_path = path.split(".", 1)
         data = load_exp(exp_name)
         if data is None:

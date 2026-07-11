@@ -143,6 +143,10 @@ def prepare_block_data(block_id, block_raw_dir, block_run_dir, shared_data, logs
 
 def train_block(block_id, block_data, block_run_dir, logs_dir, gpu):
     """Train one block through 3 progressive stages."""
+    # This runs in a ProcessPoolExecutor worker; pin its GT rendering to this
+    # block's GPU so parallel blocks render concurrently instead of all
+    # serializing their pvbatch onto CUDA 0.
+    set_pvbatch_cuda_device(gpu)
     prev_checkpoint = None
     final_model = None
     final_iter = None
@@ -474,6 +478,7 @@ def main():
     parser.add_argument("--compute_ssim", action="store_true",
                         help="Also compute SSIM (requires skimage)")
     args = parser.parse_args()
+    set_pvbatch_cuda_device(args.gpu)  # prepare/merge/finetune renders on base GPU
 
     output_dir = Path(args.output_dir) if args.output_dir else RUNS_DIR / "exp4"
     output_dir.mkdir(parents=True, exist_ok=True)

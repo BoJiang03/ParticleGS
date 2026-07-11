@@ -158,29 +158,60 @@ def _probe_egl_cuda_mapping():
     return mapping if mapping else None
 
 
-def get_pvbatch_egl_args():
-    """Get pvbatch arguments for EGL GPU pinning to CUDA device 0.
+def get_pvbatch_egl_args(cuda_device=0):
+    """Get pvbatch arguments for EGL GPU pinning to a given CUDA device.
+
+    pvbatch honors neither CUDA_VISIBLE_DEVICES nor EGL_VISIBLE_DEVICES, so to
+    render on CUDA device ``cuda_device`` we pass ``--displays <egl_idx>`` where
+    egl_idx is the EGL display whose EGL_DEVICE_CUDA_NV attribute maps to that
+    CUDA index (the EGL order differs from nvidia-smi order on this system).
 
     On hosts where the EGL→CUDA probe succeeds (multi-GPU workstation), pin to
-    the EGL display matching CUDA 0. Otherwise fall back to EGL display 0 —
-    required in Docker where no X server is available and plain
+    the EGL display matching ``cuda_device``. Otherwise fall back to EGL display
+    ``cuda_device`` — required in Docker where no X server is available and plain
     --force-offscreen-rendering still defaults to GLX and segfaults.
+
+    Passing the target device is what lets concurrent renders spread across GPUs
+    instead of all piling onto CUDA 0 (the previous hardcoded behavior).
     """
     egl_to_cuda = _probe_egl_cuda_mapping()
     if egl_to_cuda is not None:
         for egl_idx, cuda_idx in egl_to_cuda.items():
-            if cuda_idx == 0:
+            if cuda_idx == cuda_device:
                 return ["--force-offscreen-rendering",
                         "--opengl-window-backend", "EGL",
                         "--displays", str(egl_idx), "--"]
+        # Requested CUDA device not in the probed mapping — fall through to the
+        # best-effort display index below rather than silently pinning CUDA 0.
     return ["--force-offscreen-rendering",
             "--opengl-window-backend", "EGL",
-            "--displays", "0", "--"]
+            "--displays", str(cuda_device), "--"]
 
 
-def pvbatch_cmd(script, *args):
-    """Build pvbatch command with EGL pinning."""
-    return [PVBATCH_BIN] + get_pvbatch_egl_args() + [str(script)] + [str(a) for a in args]
+# Process-wide default CUDA device for pvbatch rendering. Each experiment sets
+# this once from its --gpu (set_pvbatch_cuda_device) so every GT render in that
+# process pins to its assigned GPU instead of all piling onto CUDA 0. Because
+# exp4 trains/prepares blocks in separate ProcessPoolExecutor processes, each
+# worker gets its own copy of this global and can pin to its own block_gpu.
+_PVBATCH_CUDA_DEVICE = 0
+
+
+def set_pvbatch_cuda_device(cuda_device):
+    """Set the process-wide default GPU for subsequent pvbatch renders."""
+    global _PVBATCH_CUDA_DEVICE
+    _PVBATCH_CUDA_DEVICE = int(cuda_device)
+
+
+def pvbatch_cmd(script, *args, cuda_device=None):
+    """Build a pvbatch command with EGL pinning.
+
+    ``cuda_device=None`` uses the process default (``set_pvbatch_cuda_device``,
+    itself defaulting to 0). Concurrent callers that need a specific GPU — e.g.
+    exp4 per-block prepare — pass ``cuda_device`` explicitly to override it.
+    """
+    dev = _PVBATCH_CUDA_DEVICE if cuda_device is None else cuda_device
+    return ([PVBATCH_BIN] + get_pvbatch_egl_args(dev)
+            + [str(script)] + [str(a) for a in args])
 
 
 # ── PSNR computation ─────────────────────────────────────────────────────
@@ -287,6 +318,7 @@ def ensure_shared_data(gpu=0):
 
     Returns dict with paths to all shared data.
     """
+    set_pvbatch_cuda_device(gpu)
     SHARED_DIR.mkdir(parents=True, exist_ok=True)
     logs = SHARED_DIR / "logs"
     logs.mkdir(exist_ok=True)

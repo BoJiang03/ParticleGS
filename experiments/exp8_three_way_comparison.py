@@ -27,6 +27,7 @@ def main():
                         help="Path to trained 3DGS model (e.g. F16)")
     parser.add_argument("--iteration", type=int, default=None)
     args = parser.parse_args()
+    set_pvbatch_cuda_device(args.gpu)  # pin this process's GT renders to its GPU
 
     output_dir = Path(args.output_dir) if args.output_dir else RUNS_DIR / "exp8"
     output_dir.mkdir(parents=True, exist_ok=True)

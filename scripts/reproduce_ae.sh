@@ -3,8 +3,11 @@
 #
 # One command on a bare node: it bootstraps conda + a driver-matched, built
 # `particlegs` env (scripts/bootstrap_ae.sh), fetches data, runs the eight
-# experiments that together produce all 26 enforced metrics (EXP-1, 4, 6, 7, 8,
-# 11, 13, 14 -> adae/reference_results.json), then verifies them.
+# experiments that produce the reduced AE set of 19 enforced metrics (EXP-1, 4,
+# 6, 7, 8, 11, 14 -> adae/reference_results.json), then verifies them. The two
+# render-heaviest units are dropped from this fast path to fit the ~8 h budget:
+# EXP-13 (FIRE-2 full retrain) and EXP-4's 2-block config (4-block only here).
+# The full 26/26 set is still available via scripts/reproduce.sh.
 #
 # Driver-adaptive build: the default env pins CUDA 13.0 / torch cu130 (needs an
 # R580+ driver). On a node whose driver tops out at CUDA 12.x — e.g. Chameleon
@@ -46,7 +49,7 @@ cd "${REPO_ROOT}"
 
 NUM_GPUS=4
 GPU=0
-EXP="1,4,6,7,8,11,13,14"
+EXP="1,4,6,7,8,11,14"
 SEQUENTIAL=""
 EVAL_ONLY=0
 VERIFY=1
@@ -90,7 +93,7 @@ if [[ -n "${_cbase}" && -f "${_cbase}/etc/profile.d/conda.sh" ]]; then
 fi
 
 echo "======================================================================"
-echo "ParticleGS — AE reproduction (26 enforced metrics)"
+echo "ParticleGS — AE reproduction (19 enforced metrics, reduced fast path)"
 echo "  num_gpus:    ${NUM_GPUS}"
 echo "  gpu base:    ${GPU}"
 echo "  experiments: ${EXP}"
@@ -138,8 +141,8 @@ python "${REPO_ROOT}/scripts/aggregate_results.py" --out "${REPO_ROOT}/runs/summ
 
 if [[ "${VERIFY}" = 1 && -f "${REPO_ROOT}/verify_results.py" ]]; then
     echo
-    echo "[verify] checking results against reference_results.json..."
-    python "${REPO_ROOT}/verify_results.py"
+    echo "[verify] checking results against reference_results.json (AE reduced set)..."
+    python "${REPO_ROOT}/verify_results.py" --ae
 fi
 
 echo

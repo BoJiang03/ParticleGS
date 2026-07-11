@@ -214,6 +214,7 @@ def main():
     parser = base_parser("EXP-7: Particle Recovery")
     parser.add_argument("--sub", type=str, default="all", help="a,b,c or all")
     args = parser.parse_args()
+    set_pvbatch_cuda_device(args.gpu)  # pin this process's GT renders to its GPU
 
     output_dir = Path(args.output_dir) if args.output_dir else RUNS_DIR / "exp7"
     output_dir.mkdir(parents=True, exist_ok=True)

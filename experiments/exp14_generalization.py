@@ -243,6 +243,7 @@ def main():
     parser.add_argument("--iteration", type=int, default=None)
     parser.add_argument("--frames", type=int, default=80)
     args = parser.parse_args()
+    set_pvbatch_cuda_device(args.gpu)  # pin this process's GT renders to its GPU
 
     src_root = Path(args.output_dir) if args.output_dir else RUNS_DIR / "exp1"
     out_dir = RUNS_DIR / "exp14"

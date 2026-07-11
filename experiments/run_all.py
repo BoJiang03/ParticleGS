@@ -56,9 +56,13 @@ ALL_EXPERIMENTS = {
 # ensure_shared_data() called upfront in main()).
 SELF_PREP_EXPERIMENTS = {13}
 
-# AE mode: exactly the experiments that together produce all 26 enforced metrics
-# (23 hardware-independent + 3 trend). See adae/reference_results.json.
-AE_EXPERIMENTS = [1, 4, 6, 7, 8, 11, 13, 14]
+# AE mode: the reduced experiment set sized for the SC AE ~8 h budget on a
+# multi-GPU A100 node. It produces 19 of the 26 enforced metrics — the two
+# render-heaviest units are dropped from the fast path: EXP-13 (FIRE-2 full
+# retrain) entirely, and EXP-4's 2-block config (EXP-4 runs 4-block only, see
+# run_ae_parallel / the sequential branch). The full 26/26 set remains available
+# via scripts/reproduce.sh. verify_results.py --ae enforces exactly these 19.
+AE_EXPERIMENTS = [1, 4, 6, 7, 8, 11, 14]
 
 # Single-GPU experiments that need EXP-1's trained E25 model on disk first.
 NEEDS_EXP1 = {6, 7, 8, 14}
@@ -103,7 +107,7 @@ def run_experiment(exp_num, module_name, description, gpu, extra_args=None,
 # Each background experiment writes to its own log file (concurrent subprocesses
 # cannot share the terminal legibly). Progress is printed on launch/finish.
 
-def _spawn(exp_num, gpu, extra_args, skip_data_prep, log_path):
+def _spawn(exp_num, gpu, extra_args, skip_data_prep, log_path, gpus_held=None):
     cmd = _exp_cmd(exp_num, gpu, extra_args, skip_data_prep)
     logf = open(log_path, "w")
     logf.write("$ " + " ".join(cmd) + "\n\n")
@@ -112,7 +116,8 @@ def _spawn(exp_num, gpu, extra_args, skip_data_prep, log_path):
                             stdout=logf, stderr=subprocess.STDOUT)
     print(f"  [launch] EXP-{exp_num:<2d} on GPU {gpu}  (log: {log_path.name})")
     return {"num": exp_num, "gpu": gpu, "proc": proc, "log": logf,
-            "t0": time.time(), "path": log_path}
+            "t0": time.time(), "path": log_path,
+            "gpus_held": list(gpus_held) if gpus_held is not None else [gpu]}
 
 
 def _reap(job, results):
@@ -149,43 +154,72 @@ def _run_pool(exp_nums, gpus, logdir, results):
 
 
 def run_ae_parallel(exp_nums, num_gpus, ae_quick, logdir):
-    """AE schedule on a dedicated node with physical GPUs 0..num_gpus-1.
+    """AE schedule on a node with physical GPUs 0..num_gpus-1 — one dependency-
+    aware pool, NO phase barrier.
 
-    Phase 1 overlaps the two most expensive experiments on disjoint GPU sets:
-      - EXP-4 block training uses GPUs 0..num_gpus-2 (its blocks map bi%num_gpus)
-      - EXP-1 (E25, --ae quick) uses the last GPU
-    Phase 2 pools the remaining single-GPU experiments (all of which are ready
-    once EXP-1's model exists) across all GPUs.
+    EXP-4 (the long pole) reserves the low GPUs for its whole run — its blocks
+    pin physical GPUs 0..k-1 (block_gpu = bi % k), and now render in parallel
+    too. Every other experiment is a single-GPU job on the remaining GPU(s):
+    EXP-1 runs first, and the moment it finishes EXP-6/7/8/14 (which need its
+    model) unlock; EXP-11 is independent and runs whenever a GPU is free. When
+    EXP-4 finishes, its GPUs rejoin the pool for the tail.
+
+    This replaces the old two-phase design, whose barrier reaped EXP-4 before
+    starting Phase 2 and left the EXP-1 GPU idle for hours behind EXP-4's tail.
     """
     logdir.mkdir(parents=True, exist_ok=True)
-    gpus = list(range(num_gpus))
     exp_set = set(exp_nums)
     results = {}
+    running = []
+    free = list(range(num_gpus))
 
-    # ---- Phase 1: EXP-1 || EXP-4 ----
-    print(f"\n{'='*70}\n=== AE Phase 1: EXP-1 (E25) || EXP-4 (block scan) ===\n{'='*70}")
-    phase1 = []
-    reserve_for_e1 = (1 in exp_set) and (4 in exp_set) and num_gpus > 1
+    # EXP-4 reserves the low GPUs for its entire duration.
+    e4_gpus = []
     if 4 in exp_set:
-        n4 = (num_gpus - 1) if reserve_for_e1 else num_gpus
-        extra4 = ["--num_gpus", str(n4), "--blocks", "2,4"]
-        # EXP-4 block training pins physical GPUs 0..n4-1 (block_gpu = bi % n4).
-        phase1.append(_spawn(4, 0, extra4, True, logdir / "exp4.log"))
-    if 1 in exp_set:
-        g1 = gpus[-1] if reserve_for_e1 else gpus[0]
-        extra1 = ["--ae"] if ae_quick else []
-        phase1.append(_spawn(1, g1, extra1, True, logdir / "exp1.log"))
-    for job in phase1:
-        _reap(job, results)
+        reserve_e1 = (1 in exp_set) and num_gpus > 1
+        k4 = (num_gpus - 1) if reserve_e1 else num_gpus
+        e4_gpus = free[:k4]
+        free = free[k4:]
+        blocks = "4" if ae_quick else "2,4"
+        running.append(_spawn(4, e4_gpus[0], ["--num_gpus", str(k4), "--blocks", blocks],
+                              True, logdir / "exp4.log", gpus_held=e4_gpus))
 
-    if 1 in exp_set and not results.get(1, False):
-        print("  WARNING: EXP-1 failed; EXP-6/7/8/14 depend on its model and may fail.")
+    # Everything else: single-GPU jobs. 6/7/8/14 wait for EXP-1's model when
+    # EXP-1 is in this run; otherwise they assume it exists on disk already.
+    have_exp1 = 1 in exp_set
+    order = lambda xs: sorted(xs, key=lambda n: -_COLD_COST_MIN.get(n, 30))
+    ready, waiting = [], []
+    for n in exp_nums:
+        if n == 4:
+            continue
+        (waiting if (n in NEEDS_EXP1 and have_exp1) else ready).append(n)
+    ready = order(ready)
 
-    # ---- Phase 2: remaining single-GPU experiments, pooled ----
-    phase2 = [n for n in exp_nums if n not in (1, 4)]
-    if phase2:
-        print(f"\n{'='*70}\n=== AE Phase 2: {phase2} across {num_gpus} GPUs ===\n{'='*70}")
-        _run_pool(phase2, gpus, logdir, results)
+    print(f"\n{'='*70}\n=== AE parallel pool: EXP-4 on GPUs {e4_gpus or '-'}; "
+          f"ready {ready}" + (f" then {waiting} (after EXP-1)" if waiting else "") +
+          f" ===\n{'='*70}")
+
+    while ready or waiting or running:
+        while ready and free:
+            num = ready.pop(0)
+            gpu = free.pop(0)
+            extra = ["--ae"] if (num == 1 and ae_quick) else []
+            running.append(_spawn(num, gpu, extra, True,
+                                  logdir / f"exp{num}.log", gpus_held=[gpu]))
+        time.sleep(5)
+        still = []
+        for job in running:
+            if job["proc"].poll() is None:
+                still.append(job)
+                continue
+            _reap(job, results)
+            free.extend(job["gpus_held"])         # release GPU(s) back to pool
+            if job["num"] == 1:
+                if not results.get(1, False):
+                    print("  WARNING: EXP-1 failed; EXP-6/7/8/14 depend on its model.")
+                ready = order(ready + waiting)     # unlock EXP-1 dependents
+                waiting = []
+        running = still
 
     return results
 
@@ -252,7 +286,8 @@ def main():
             if num == 1 and args.ae:
                 extra = ["--ae"]
             if num == 4:
-                extra = ["--num_gpus", str(args.num_gpus), "--blocks", "2,4"]
+                blocks = "4" if args.ae else "2,4"
+                extra = ["--num_gpus", str(args.num_gpus), "--blocks", blocks]
             ok = run_experiment(num, module, desc, args.gpu, extra_args=extra,
                                 skip_data_prep=num not in SELF_PREP_EXPERIMENTS)
             results[num] = ok
