@@ -60,15 +60,18 @@
 # Wall-clock (cold, from raw data; no E25 train, so dominated by live GT
 # rendering + the ~17-min finetune + EXP-7's CPU particle compare + EXP-11's 6K
 # training-memory probe — hardware/driver-dependent):
-#   graphics node, 2 GPUs     : ~2.2 h  MEASURED end-to-end from a fresh clone on
-#                               a 2x RTX PRO 6000 workstation: env build ~5 min +
-#                               experiments ~117 min = 132 min (verify 18/18).
-#   compute node (A100/H100)  : render-bound; GT rendering may still be slow
-#   1x GPU                    : use scripts/reproduce.sh instead (this needs >=2)
-# Per-experiment on that node: EXP-1 16 min (incl. one-time VTP conversion),
-# EXP-4 15 (shipped blocks -> merge -> 60k finetune), EXP-7 47 (CPU 280M compare),
-# EXP-14 33, EXP-11 32 (6K training-mem probe), EXP-6/8 ~11 each; eval GT (240
-# frames, 1080p) ~3 min.
+# Two MEASURED end-to-end points from a fresh clone (env build + experiments +
+# verify), both 18/18:
+#   1x RTX 6000 (Turing), single GPU  : ~7.0 h  (Chameleon rtx_6000 node) —
+#                               fits the ~8 h AE budget on its own.
+#   2x RTX PRO 6000 (Blackwell)       : ~2.2 h  (env ~5 min + experiments 132 min).
+#   compute node (A100/H100)          : render-bound; GT rendering slower still.
+# Runs on a SINGLE GPU — there is no >=2-GPU requirement; more/faster GPUs just
+# cut wall-clock by parallelizing rendering + training.
+# Per-experiment on the 2x RTX PRO 6000: EXP-1 16 min (incl. one-time VTP
+# conversion), EXP-4 15 (shipped blocks -> merge -> 60k finetune), EXP-7 47 (CPU
+# 280M compare), EXP-14 33, EXP-11 32 (6K training-mem probe), EXP-6/8 ~11 each;
+# eval GT (240 frames, 1080p) ~3 min.
 #
 # Full-fidelity alternative (all 15+11 sweep points, live block training, ~11-15 h):
 #   bash scripts/reproduce.sh
@@ -104,7 +107,7 @@ while [[ $# -gt 0 ]]; do
         --eval-only) EVAL_ONLY=1; shift ;;
         --no-verify) VERIFY=0; shift ;;
         --no-setup) SETUP=0; shift ;;
-        -h|--help) sed -n '2,84p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,87p' "$0"; exit 0 ;;
         *) echo "unknown arg: $1" >&2; exit 1 ;;
     esac
 done

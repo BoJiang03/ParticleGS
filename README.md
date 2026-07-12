@@ -9,13 +9,14 @@ Reviewer quickstart for the **ParticleGS** paper (SC26, `pap525`):
 ## TL;DR
 
 ```bash
-# Fast path for reviewers — verifies the 18 scored metrics (~2 h on a 2-GPU
-# graphics node). One command on a bare node: it installs the env and runs.
-bash scripts/reproduce_ae.sh --num_gpus 2
+# Fast path for reviewers — verifies the 18 scored metrics. One command on a
+# bare node: it installs the env and runs. ~7 h on 1x RTX 6000 (fits the ~8 h
+# AE budget), ~2.2 h on 2x RTX PRO 6000. Set --num_gpus to your GPU count.
+bash scripts/reproduce_ae.sh --num_gpus 1
 python verify_results.py --ae          # PASS/FAIL vs the paper
 
 # Full reproduction — retrains everything, all 26 metrics (~11–15 h).
-bash scripts/reproduce.sh --num_gpus 2
+bash scripts/reproduce.sh --num_gpus 1
 python verify_results.py
 ```
 
@@ -67,16 +68,18 @@ Raw particle data is **not** shipped and is fetched automatically on first run:
 ### Fast path (recommended for AE) — `reproduce_ae.sh`
 
 ```bash
-bash scripts/reproduce_ae.sh --num_gpus 2      # add --no-setup if the env is built
+bash scripts/reproduce_ae.sh --num_gpus 1      # set N to your GPU count; --no-setup if env built
 ```
 
 Runs EXP-1/4/6/7/8/11/14 → **18 scored metrics**, then verifies them. It drops
 the two render-heaviest units of the full run (FIRE-2 retrain, EXP-4's 2-block
 config) and the LCP baseline, and — using the shipped models — trains only the
-4-block finetune live. **Measured ~2.2 h end-to-end from a fresh clone on a
-2× RTX PRO 6000 workstation** (env build ~5 min + experiments ~117 min); it is
-render-bound, so a compute-class GPU will be slower. Flags: `--no-setup` (skip
-env build), `--sequential` (disable parallel scheduling), `--gpu B` (base GPU).
+4-block finetune live. Measured end-to-end from a fresh clone (18/18 both):
+**~7.0 h on 1× RTX 6000 (Turing, single GPU — fits the ~8 h AE budget)**, or
+**~2.2 h on 2× RTX PRO 6000**. It is render-bound, so a compute-class GPU
+(A100/H100) is slower. Runs on a single GPU; more/faster GPUs cut wall-clock.
+Flags: `--no-setup` (skip env build), `--sequential` (disable parallel
+scheduling), `--gpu B` (base GPU).
 
 ### Full path — `reproduce.sh`
 
@@ -90,9 +93,11 @@ the full SZ3/LCP rate-distortion sweeps → **all 26 metrics**. ~11–15 h.
 ### Single-block training time — `reproduce_ae_single_block.sh`
 
 The fast path ships E25 pre-trained, so reviewers never see the single-block
-training cost. To observe it, run this script — it trains E25 live and reports
-the wall-clock. The time is graphics-hardware-specific; **for the exact paper
-number, contact the authors to schedule time on the authors' workstation.**
+training cost. To observe it, run this **optional, supplementary** script — it
+trains E25 live and reports the wall-clock (~1.5 h on 1× RTX 6000; run it
+separately from the fast path, not back-to-back within the 8 h budget). The time
+is graphics-hardware-specific; **for the exact paper number, contact the authors
+to schedule time on the authors' workstation.**
 
 ## 5. Expected results
 
