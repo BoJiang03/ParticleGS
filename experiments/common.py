@@ -804,10 +804,17 @@ def evaluate_model(model_dir, iteration, shared_data, logs_dir, gpu=0,
             ssim_val, _ = compute_ssim_dirs(gt_dir, render_dir)
             entry["ssim"] = ssim_val
         results[eval_id] = entry
-        msg = f"    {eval_id}: PSNR={psnr:.2f}  masked={mpsnr:.2f}" if psnr else f"    {eval_id}: N/A"
+        # psnr/mpsnr can independently be None (mpsnr is None when a pair has no
+        # foreground above BG_THRESH, e.g. an all-black render from a bad/stale
+        # VTP). Format each guarded so logging never crashes on None.
+        if psnr is None:
+            msg = f"    {eval_id}: N/A"
+        else:
+            mp_str = f"{mpsnr:.2f}" if mpsnr is not None else "N/A"
+            msg = f"    {eval_id}: PSNR={psnr:.2f}  masked={mp_str}"
         if compute_ssim and entry.get("ssim"):
             msg += f"  SSIM={entry['ssim']:.4f}"
-        if psnr:
+        if psnr is not None:
             msg += f"  (n={n})"
         print(msg)
 
