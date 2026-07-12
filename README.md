@@ -97,7 +97,9 @@ number, contact the authors to schedule time on the authors' workstation.**
 ## 5. Expected results
 
 `verify_results.py [--ae]` compares `runs/<exp>/results.json` against
-`reference_results.json` (captured on the authors' RTX PRO 6000). Headline claims:
+`reference_results.json` (captured on the authors' RTX PRO 6000). The full list
+of expected values + tolerances for manual cross-checking is in
+[`AE_EXPECTED.md`](AE_EXPECTED.md). Headline claims:
 
 | Metric | Expected | Tol / rule | Paper |
 |---|---|---|---|
