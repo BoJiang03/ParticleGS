@@ -19,14 +19,14 @@
       "class": "hw_independent",
       "tolerance_abs": 0.3,
       "unit": "dB",
-      "paper_ref": "Tab. 3 (2-block finetuned)"
+      "paper_ref": "Tab. III (2-block finetuned)"
     },
     {
       "path": "exp4.blocks_2.finetuned.num_gaussians",
       "expected": 564062,
       "class": "hw_independent",
       "tolerance_rel": 0.03,
-      "paper_ref": "Tab. 3 (2-block finetuned)"
+      "paper_ref": "Tab. III (2-block finetuned)"
     },
     {
       "path": "exp4.blocks_2.finetuned.size_mb",
@@ -41,14 +41,14 @@
       "class": "hw_independent",
       "tolerance_abs": 0.3,
       "unit": "dB",
-      "paper_ref": "Tab. 3 (4-block finetuned)"
+      "paper_ref": "Tab. III (4-block finetuned)"
     },
     {
       "path": "exp4.blocks_4.finetuned.num_gaussians",
       "expected": 605702,
       "class": "hw_independent",
       "tolerance_rel": 0.03,
-      "paper_ref": "Tab. 3 (4-block finetuned)"
+      "paper_ref": "Tab. III (4-block finetuned)"
     },
     {
       "path": "exp4.blocks_4.finetuned.size_mb",
@@ -93,7 +93,7 @@
       "expected": 85.8,
       "class": "hw_independent",
       "tolerance_rel": 0.03,
-      "paper_ref": "Tab. 6"
+      "paper_ref": "Tab. III (4-block model)"
     },
     {
       "path": "exp6.summary.model_size_mb",
@@ -123,7 +123,7 @@
       "class": "trend",
       "trend_rule": "gt",
       "trend_threshold": 100.0,
-      "paper_ref": "Tab. 6 (speedup vs ParaView)",
+      "paper_ref": "Tab. VII (speedup vs ParaView)",
       "note": "Exact speedup is GPU-pair specific; paper claim is that 3DGS is >100x faster than ParaView. Trend test passes if speedup > 100."
     },
 
@@ -154,7 +154,7 @@
       "class": "hw_dependent",
       "unit": "min",
       "reference_gpu": "RTX PRO 6000 Blackwell workstation (NVMe)",
-      "paper_ref": "Tab. 7 (raw -> VTP conversion, 280M particles)",
+      "paper_ref": "Tab. VII (raw -> VTP conversion, 280M particles)",
       "note": "Timed once when shared data is first generated. Shows MISSING if runs/shared/ was created by an artifact version without timing support; delete runs/shared/particles.vtp and rerun to measure."
     },
 
@@ -164,14 +164,14 @@
       "class": "hw_independent",
       "tolerance_abs": 0.3,
       "unit": "dB",
-      "paper_ref": "Tab. 5 / rate-distortion figure (ParticleGS E25 single block)"
+      "paper_ref": "Tab. VI / Fig. 8 (ParticleGS E25 single block)"
     },
     {
       "path": "exp1.exp1b_e25.cr",
       "expected": 290.0,
       "class": "hw_independent",
       "tolerance_rel": 0.03,
-      "paper_ref": "Tab. 5 / rate-distortion figure (ParticleGS E25 single block)"
+      "paper_ref": "Tab. VI / Fig. 8 (ParticleGS E25 single block)"
     },
     {
       "path": "exp1.exp1a_sz3.13.avg_masked_psnr",

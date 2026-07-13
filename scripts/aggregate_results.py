@@ -3,7 +3,7 @@
 
 Invoked at the end of reviewer_eval.sh. Emits three files in --out:
   summary.json     — merged raw results from every runs/expN/results.json
-  tables.md        — Markdown view of Tab. 3 / 5 / 6 / 7 / 8
+  tables.md        — Markdown view of Tab. III / VI / VII / VIII / IX
   fig_scale.json   — per-block Gaussians vs particles (Fig. scale)
 
 Usage:
@@ -28,10 +28,10 @@ def fmt(v, n=2, unit=""):
 
 
 def tab3_block_scan(exp4):
-    """Tab. 3 — merged and finetuned columns across block counts."""
+    """Tab. III — merged and finetuned columns across block counts."""
     if not exp4:
         return "*(no runs/exp4/results.json — EXP-4 did not run)*"
-    lines = ["### Tab. 3 — Block Training Scan",
+    lines = ["### Tab. III — Block Training Scan",
              "",
              "| Blocks | Merged mPSNR | Merged Gaussians | Merged MB | FT mPSNR | FT Gaussians | FT MB | FT SSIM |",
              "|--------|--------------|------------------|-----------|----------|--------------|-------|---------|"]
@@ -51,10 +51,10 @@ def tab3_block_scan(exp4):
 
 
 def tab5_rate_distortion(exp1, exp12):
-    """Tab. 5 — 3DGS vs SZ3/LCP rate-distortion."""
+    """Tab. VI — 3DGS vs SZ3/LCP rate-distortion."""
     if not exp1:
         return "*(no runs/exp1/results.json — EXP-1 did not run)*"
-    lines = ["### Tab. 5 — Rate-Distortion (3DGS vs SZ3/LCP)",
+    lines = ["### Tab. VI — Rate-Distortion (3DGS vs SZ3/LCP)",
              "",
              "**E25 single-block (3DGS):**",
              ""]
@@ -82,10 +82,10 @@ def tab5_rate_distortion(exp1, exp12):
 
 
 def tab6_perf(exp6, exp11):
-    """Tab. 6 — performance (FPS / memory / loading / merge)."""
+    """Tab. VII — performance (FPS / memory / loading / merge)."""
     if not exp6 and not exp11:
         return "*(no EXP-6 / EXP-11 results)*"
-    lines = ["### Tab. 6 — Rendering and Inference Performance", ""]
+    lines = ["### Tab. VII — Rendering and Inference Performance", ""]
     if exp6 and "summary" in exp6:
         s = exp6["summary"]
         lines += [
@@ -129,11 +129,11 @@ def tab6_perf(exp6, exp11):
 
 
 def tab7_recovery_methods(exp7):
-    """Tab. 7 — recovery methods (V0/V1/V4/V6)."""
+    """Tab. VIII — recovery methods (V0/V1/V4/V6)."""
     arr = (exp7 or {}).get("7a") or []
     if not arr:
         return "*(no EXP-7 7a entries)*"
-    lines = ["### Tab. 7 — Particle Recovery Methods",
+    lines = ["### Tab. VIII — Particle Recovery Methods",
              "",
              "| Method | Density RMSE | Density Corr | NN GT mean | NN rec mean | NN rec std |",
              "|--------|--------------|--------------|------------|-------------|-----------|"]
@@ -150,11 +150,11 @@ def tab7_recovery_methods(exp7):
 
 
 def tab8_recovery_blocks(exp7):
-    """Tab. 8 — recovery across 1/2/4/8/16 blocks."""
+    """Tab. IX — recovery across 1/2/4/8/16 blocks."""
     arr = (exp7 or {}).get("7c") or (exp7 or {}).get("7b") or []
     if not arr:
         return "*(no EXP-7 7b/7c entries)*"
-    lines = ["### Tab. 8 — Particle Recovery across Block Counts (or Scales)",
+    lines = ["### Tab. IX — Particle Recovery across Block Counts (or Scales)",
              "",
              "| Key | Density RMSE | Density Corr | NN GT mean | NN rec mean |",
              "|-----|--------------|--------------|------------|-------------|"]

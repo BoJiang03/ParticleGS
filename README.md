@@ -60,7 +60,7 @@ Raw particle data is **not** shipped and is fetched automatically on first run:
 
 | Dataset | Used by | Size |
 |---|---|---|
-| HACC 280 M subset ([SDRbench](https://sdrbench.github.io)) | all main results | 3.2 GB |
+| HACC 280 M subset ([SDRbench](https://sdrbench.github.io)) | all main results | 3.4 GB |
 | FIRE-2 L172 snapshot 010 (CC BY 4.0) | full run only (FIRE-2 generalization) | 3.2 GB |
 
 ## 4. Reproducing the paper
@@ -87,8 +87,9 @@ scheduling), `--gpu B` (base GPU).
 bash scripts/reproduce.sh --num_gpus 2
 ```
 
-Retrains every model from the raw particles (E25, all blocks, FIRE-2) and runs
-the full SZ3/LCP rate-distortion sweeps → **all 26 metrics**. ~11–15 h.
+Retrains from the raw particles (E25, the 2/4-block configs, FIRE-2) and runs
+the full SZ3/LCP rate-distortion sweeps → **all 26 metrics**. ~11–15 h. (The
+paper's 8/16-block rows and Fig. 7 scaling are outside AE scope.)
 
 ### Single-block training time — `reproduce_ae_single_block.sh`
 

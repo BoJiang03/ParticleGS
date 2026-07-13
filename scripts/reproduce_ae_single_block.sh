@@ -128,7 +128,7 @@ mp = e.get("avg_masked_psnr")
 print("SINGLE-BLOCK (E25) LIVE TRAINING RESULT")
 print(f"  end-to-end train time : {t} min  (this machine)")
 if mp is not None:
-    print(f"  masked PSNR (eval)    : {mp:.2f} dB   (paper 26.28)")
+    print(f"  masked PSNR (eval)    : {mp:.2f} dB   (paper 26.26)")
     print(f"  compression ratio     : {e.get('cr')}x   (paper 290)")
     print(f"  Gaussians / size      : {e.get('num_gaussians')} / {e.get('size_mb')} MB")
 PY

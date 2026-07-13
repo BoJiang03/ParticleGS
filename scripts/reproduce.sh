@@ -13,7 +13,7 @@
 #
 # EXP-12 (SSIM-augmented rate-distortion sweep) is NOT in the default
 # set — it adds another ~5 h of SZ3/LCP re-evaluation and only
-# supplies an optional SSIM column for Tab. 5. Pass it explicitly to
+# supplies an optional SSIM column for Tab. VI. Pass it explicitly to
 # reproduce that column:
 #   bash scripts/reproduce.sh --exp 1,4,6,7,8,11,12,13,14
 #
@@ -88,7 +88,7 @@ python "${REPO_ROOT}/scripts/aggregate_results.py" --out "${REPO_ROOT}/runs/summ
 echo
 echo "======================================================================"
 echo "DONE. Paper tables: runs/summary/"
-echo "  tables.md         — Markdown view of Tab. 3 / 5 / 6 / 7 / 8"
+echo "  tables.md         — Markdown view of Tab. III / VI / VII / VIII / IX"
 echo "  summary.json      — machine-readable merged results"
 echo "  fig_scale.json    — Fig. scale data (Gaussians vs particles/block)"
 echo "======================================================================"

@@ -9,8 +9,8 @@ Usage:
     python -m experiments.run_all --exp 1          # run only EXP-1
     python -m experiments.run_all --exp 1,4,6      # run selected experiments
 
-    # AE mode: the 8-experiment set covering all 26 enforced metrics, scheduled
-    # in parallel across a dedicated multi-GPU node (fits the SC AE 8h budget).
+    # AE mode: the 7-experiment set covering the 18 enforced AE metrics,
+    # scheduled in parallel across the available GPUs (fits the SC AE 8h budget).
     python -m experiments.run_all --ae --num_gpus 4
 
 Experiment dependency graph:
@@ -73,11 +73,12 @@ ALL_EXPERIMENTS = {
 SELF_PREP_EXPERIMENTS = {13}
 
 # AE mode: the reduced experiment set sized for the SC AE ~8 h budget on a
-# multi-GPU A100 node. It produces 19 of the 26 enforced metrics — the two
-# render-heaviest units are dropped from the fast path: EXP-13 (FIRE-2 full
-# retrain) entirely, and EXP-4's 2-block config (EXP-4 runs 4-block only, see
-# run_ae_parallel / the sequential branch). The full 26/26 set remains available
-# via scripts/reproduce.sh. verify_results.py --ae enforces exactly these 19.
+# single graphics-class GPU (more GPUs cut wall-clock). It produces 18 of the
+# 26 enforced metrics — three render-heavy units are dropped from the fast path:
+# EXP-13 (FIRE-2 full retrain) and the LCP baseline entirely, and EXP-4's
+# 2-block config (EXP-4 runs 4-block only, see run_ae_parallel / the sequential
+# branch). The full 26/26 set remains available via scripts/reproduce.sh.
+# verify_results.py --ae enforces exactly these 18.
 AE_EXPERIMENTS = [1, 4, 6, 7, 8, 11, 14]
 
 # Single-GPU experiments that need EXP-1's trained E25 model on disk first.
@@ -464,7 +465,7 @@ def main():
     parser.add_argument("--exp", type=str, default=None,
                         help="Comma-separated experiment numbers (e.g. 1,4,6). Default: all")
     parser.add_argument("--ae", action="store_true",
-                        help="AE mode: run the 26-metric experiment set with EXP-1 in "
+                        help="AE mode: run the 18-metric AE experiment set with EXP-1 in "
                              "quick mode and parallel multi-GPU scheduling (SC AE 8h budget)")
     parser.add_argument("--sequential", action="store_true",
                         help="Force sequential execution even in --ae mode")
@@ -561,7 +562,7 @@ def main():
         print(f"  • Aggregated tables:    {RUNS_DIR / 'summary'}/  "
               f"(scripts/aggregate_results.py)")
         print(f"  • Final verification:   python verify_results.py --ae  "
-              f"(the 19 enforced AE metrics)")
+              f"(the 18 enforced AE metrics)")
         if not results.get(1, True):
             print(f"  ! EXP-1 FAILED — EXP-6/7/8/14 depend on its E25 model and "
                   f"will report MISSING. Re-run after fixing EXP-1.")
