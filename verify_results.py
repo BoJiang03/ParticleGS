@@ -109,9 +109,10 @@ def main():
                         help="Always exit 0 regardless of failures")
     parser.add_argument("--ae", action="store_true",
                         help="AE fast-path mode: enforce only the reduced set "
-                             "(skip EXP-13/FIRE-2 and EXP-4 2-block, which the "
-                             "full scripts/reproduce.sh run still covers). Matches "
-                             "run_all.py --ae / scripts/reproduce_ae.sh.")
+                             "(skip EXP-13/FIRE-2, EXP-4 2-block, and the LCP "
+                             "baseline, which the full scripts/reproduce.sh run "
+                             "still covers). Matches run_all.py --ae / "
+                             "scripts/reproduce_ae.sh.")
     args = parser.parse_args()
 
     # Metric-path prefixes excluded from the AE fast path. See run_all.py
@@ -147,8 +148,17 @@ def main():
         exp_name, inner_path = path.split(".", 1)
         data = load_exp(exp_name)
         if data is None:
+            # A missing results.json means the experiment never ran (or
+            # crashed). Scored metrics must FAIL — never silently shrink the
+            # denominator, or a partial run could print an all-green OVERALL.
             counts["missing"] += 1
-            print(f"[SKIP] {path}  (no {exp_name}/results.json)")
+            if m["class"] in ("hw_independent", "trend"):
+                key = "hw_indep_fail" if m["class"] == "hw_independent" else "trend_fail"
+                counts[key] += 1
+                fails.append(path)
+                print(f"[FAIL] {path}  (no {exp_name}/results.json — experiment did not run)")
+            else:
+                print(f"[INFO] {path}  (no {exp_name}/results.json; hardware-dependent, reported only)")
             continue
 
         actual = get_nested(data, inner_path)
@@ -201,7 +211,8 @@ def main():
           f"{counts['trend_pass']+counts['trend_fail']} passed")
     print(f"Hardware-dependent:   {counts['hw_dep_reported']} reported (not scored)")
     if counts["missing"]:
-        print(f"Skipped (missing):    {counts['missing']}")
+        print(f"Missing results.json: {counts['missing']} metrics "
+              f"(scored ones counted as FAIL)")
     print(f"OVERALL:              {strict_pass}/{total_strict} enforced metrics passed")
     if fails:
         print("\nFailed metrics:")

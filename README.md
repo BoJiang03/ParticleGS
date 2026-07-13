@@ -22,8 +22,9 @@ python verify_results.py
 
 The fast path **ships the pre-trained E25 single-block model and the 4 sub-block
 models** (the two slowest trainings), trains only the 4-block finetune live
-(~17 min), and re-renders all ground truth on your node. The full path ships
-nothing and retrains from the raw particles.
+(~17 min for the whole unit: merge + 60k-iter finetune + eval; the timed
+finetune itself is 14.4 min), and re-renders all ground truth on your node.
+The full path ships nothing and retrains from the raw particles.
 
 ---
 
@@ -88,8 +89,9 @@ bash scripts/reproduce.sh --num_gpus 2
 ```
 
 Retrains from the raw particles (E25, the 2/4-block configs, FIRE-2) and runs
-the full SZ3/LCP rate-distortion sweeps → **all 26 metrics**. ~11–15 h. (The
-paper's 8/16-block rows and Fig. 7 scaling are outside AE scope.)
+the full SZ3/LCP rate-distortion sweeps → **all 26 metrics**. ~11 h on 2 GPUs;
+~15 h on a single GPU (EXP-4 block training runs serially). (The paper's
+8/16-block rows and Fig. 7 scaling are outside AE scope.)
 
 ### Single-block training time — `reproduce_ae_single_block.sh`
 
@@ -109,19 +111,27 @@ of expected values + tolerances for manual cross-checking is in
 
 | Metric | Expected | Tol / rule | Paper |
 |---|---|---|---|
-| ParticleGS E25 — masked PSNR @ CR 290× | **26.28 dB** | ± 0.3 dB | Tab. VI / Fig. 8 |
-| SZ3 at matched CR (~292×) — masked PSNR | **18.57 dB** | ± 0.1 dB | R-D fig |
+| ParticleGS E25 — masked PSNR @ CR 290× | **26.28 dB** | ± 0.3 dB | Tab. VI / Fig. 8 ¹ |
+| SZ3 at matched CR (~292×) — masked PSNR | **18.57 dB** | ± 0.1 dB | R-D fig ¹ |
 | → ParticleGS lead at iso-CR | **+7.7 dB** | — | headline |
-| 4-block finetuned — PSNR / #G / size | 27.5 dB / 606k / 39.3 MB | ± 0.3 dB, ± 3 % | Tab. III |
+| 4-block finetuned — PSNR / #G / size | 27.5 dB / 606k / 39.3 MB | ± 0.3 dB, ± 3 % | Tab. III ¹ |
 | Particle recovery, 4-block — density corr | 0.923 | > 0.9 | recovery |
 | 3DGS vs ParaView render speedup | 2525× | > 100× | Tab. VII |
 | Generalization, out-of-range radius | 20.67 dB | > 18 dB | gen. |
+
+¹ The artifact enforces **masked** PSNR (foreground pixels, the stricter
+metric); the paper's tables print **full-image** PSNR — Tab. VI single-block
+28.80 dB, Tab. III 4-block 29.94 dB, Tab. IV FIRE-2 29.27 dB. Both metrics
+come from the same renders; the masked references here are what
+`verify_results.py` scores.
 
 Training carries ±3 % Gaussian-count / ±0.3 dB PSNR stochastic noise; the SZ3
 baseline is deterministic (hence the tight tolerance). The full run adds the
 LCP baseline, the 2-block config, and the FIRE-2 row (26 metrics total).
 Hardware-dependent references (reported, not scored): 3DGS 803 FPS, ParaView
-0.32 FPS, training peak 10.5 GB, finetune 14.4 min, raw→VTP 6.85 min.
+0.32 FPS, training peak 10.5 GB (total nvidia-smi device usage; paper Tab. VII
+prints 8.5 GB, the training process's allocator peak), finetune 14.4 min,
+raw→VTP 6.85 min.
 Full numerical tables land in `runs/summary/`.
 
 ## 6. Notes

@@ -48,8 +48,8 @@ SZ3_EB_SWEEP = [
 # rate-distortion curve; verification enforces a single point per baseline. Run
 # only that point and leave lightweight placeholders in the results list so its
 # index is preserved (reference_results.json keys exp1a_sz3.13 / exp1c_lcp.8 by
-# list index). Cuts ~24 of 26 pvbatch renders → exp1 ~350min → ~80min (E25 train
-# dominates and cannot be reduced).
+# list index). Cuts ~24 of 26 pvbatch renders → exp1 ~350min → ~80min with E25
+# trained live, or ~15–20 min with --use_pretrained_e25 (reproduce_ae.sh).
 AE_SZ3_IDX = 13   # -> reference_results.json "exp1.exp1a_sz3.13"
 AE_LCP_IDX = 8    # -> reference_results.json "exp1.exp1c_lcp.8"
 

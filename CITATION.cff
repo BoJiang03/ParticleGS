@@ -3,7 +3,7 @@ message: "If you use this artifact, please cite the SC26 paper (see preferred-ci
 title: "ParticleGS: 3D Gaussian Splatting for Scientific Particle Data Compression and Rendering (SC26 artifact)"
 type: software
 repository-code: "https://github.com/BoJiang03/ParticleGS"
-license-url: "https://github.com/BoJiang03/ParticleGS#9-license"
+license-url: "https://github.com/BoJiang03/ParticleGS/blob/main/submodules/diff-gaussian-rasterization/LICENSE.md"
 authors:
   - family-names: Jiang
     given-names: Bo

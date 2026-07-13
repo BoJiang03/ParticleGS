@@ -166,10 +166,13 @@ def main():
     print(f"  3DGS ({gs_n:,} Gaussians):  {gs_fps:.1f} FPS  ({gs_ms:.2f} ms/frame)")
     print(f"  Speedup: {speedup:.0f}x")
 
-    # Data size comparison
-    raw_size_gb = sum(f.stat().st_size for f in RAW_DIR.iterdir() if f.suffix == ".f32") / 1e9
+    # Data size comparison. CR is the pure byte ratio raw / model — the same
+    # convention as exp1 / exp_fire2 and the paper (size_mb is MiB, so convert
+    # back to bytes; do NOT mix decimal GB with binary MB).
+    raw_size = sum(f.stat().st_size for f in RAW_DIR.iterdir() if f.suffix == ".f32")
+    raw_size_gb = raw_size / 1e9
     model_stats = get_model_stats(model_dir, iteration)
-    cr = raw_size_gb * 1000 / model_stats["size_mb"]
+    cr = raw_size / (model_stats["size_mb"] * 1024 * 1024) if model_stats["size_mb"] > 0 else 0
     print(f"\n  Data: {raw_size_gb:.2f} GB raw vs {model_stats['size_mb']:.0f} MB PLY "
           f"({cr:.0f}x compression)")
 

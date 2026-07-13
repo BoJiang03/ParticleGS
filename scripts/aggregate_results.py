@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Aggregate runs/exp*/results.json into paper-table form.
 
-Invoked at the end of reviewer_eval.sh. Emits three files in --out:
+Invoked at the end of reproduce_ae.sh / reproduce.sh. Emits three files in --out:
   summary.json     — merged raw results from every runs/expN/results.json
   tables.md        — Markdown view of Tab. III / VI / VII / VIII / IX
   fig_scale.json   — per-block Gaussians vs particles (Fig. scale)

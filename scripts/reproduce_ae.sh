@@ -58,11 +58,12 @@
 # bound on this pipeline and can overrun the budget. Prefer a graphics node.
 #
 # Wall-clock (cold, from raw data; no E25 train, so dominated by live GT
-# rendering + the ~17-min finetune + EXP-7's CPU particle compare + EXP-11's 6K
+# rendering + the ~17-min EXP-4 unit (merge + 60k finetune + eval; the timed
+# finetune itself is ~14 min) + EXP-7's CPU particle compare + EXP-11's 6K
 # training-memory probe — hardware/driver-dependent):
 # Two MEASURED end-to-end points from a fresh clone (env build + experiments +
 # verify), both 18/18:
-#   1x RTX 6000 (Turing), single GPU  : ~7.0 h  (Chameleon rtx_6000 node) —
+#   1x RTX 6000 (Turing), single GPU  : ~7.0 h  (Chameleon gpu_rtx6000 node) —
 #                               fits the ~8 h AE budget on its own.
 #   2x RTX PRO 6000 (Blackwell)       : ~2.2 h  (env ~5 min + experiments 132 min).
 #   compute node (A100/H100)          : render-bound; GT rendering slower still.

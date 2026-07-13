@@ -116,8 +116,9 @@ echo
 echo "Activate the environment:"
 echo "  conda activate ${ENV_NAME}"
 echo
-echo "Recommended — AE reproduction (18 enforced metrics, ~5-8 h, HACC only):"
-echo "  bash scripts/reproduce_ae.sh --num_gpus 4"
+echo "Recommended — AE reproduction (18 enforced metrics, ~7 h on 1x RTX 6000,"
+echo "~2.2 h on 2x RTX PRO 6000; HACC only):"
+echo "  bash scripts/reproduce_ae.sh --num_gpus 1"
 echo
 echo "Full reproduction (all 26 metrics; also auto-downloads FIRE-2 for EXP-13):"
 echo "  bash scripts/reproduce.sh --gpu 0 --num_gpus 2"

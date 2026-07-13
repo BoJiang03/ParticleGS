@@ -25,7 +25,7 @@ tight ±0.1 dB band. Tolerances below already account for this.
 | 5 | 4-block finetuned masked PSNR | `exp4.blocks_4.finetuned.masked_psnr` | 27.5 dB | ± 0.3 |
 | 6 | 4-block finetuned #Gaussians | `exp4.blocks_4.finetuned.num_gaussians` | 605702 | ± 3 % |
 | 7 | 4-block finetuned size | `exp4.blocks_4.finetuned.size_mb` | 39.3 MB | ± 3 % |
-| 8 | 3DGS compression ratio (HACC) | `exp6.summary.compression_ratio` | 85.8 | ± 3 % |
+| 8 | 3DGS compression ratio (HACC) | `exp6.summary.compression_ratio` | 81.8 | ± 3 % |
 | 9 | 3DGS model size | `exp6.summary.model_size_mb` | 39.3 MB | ± 3 % |
 | 10 | 3DGS / ParaView render speedup | `exp6.summary.speedup` | 2525.3 | **> 100** |
 | 11 | 4-block inference #Gaussians | `exp11.inference_memory.4_block_finetuned.num_gaussians` | 605702 | ± 3 % |
@@ -43,6 +43,23 @@ tight ±0.1 dB band. Tolerances below already account for this.
 > Row 13 (`exp7.7b.2`) requires the current code: the 4-block recovery is at list
 > index 2 via index-preserving placeholders. On stale code it reports MISSING.
 
+> **Masked vs. full PSNR:** the artifact enforces *masked* PSNR (foreground
+> pixels, the stricter metric); the paper's tables print *full-image* PSNR
+> (Tab. VI single-block 28.80 dB, Tab. III 4-block 29.94 dB, Tab. IV FIRE-2
+> 29.27 dB). Both come from the same renders.
+
+> **Row 8:** the byte-ratio CR of the 4-block model (raw 3.37 GB / 39.3 MiB),
+> same convention as rows 2/4. The paper has no 4-block CR table entry; the
+> size column of Tab. III is the cross-check.
+
+> **Row 12** expects the *single-block* (E25) model, which `reproduce_ae.sh` /
+> `reproduce.sh` guarantee. If you additionally train an 8-block model
+> (`runs/exp4/blocks_8`), EXP-7 will prefer it and V0 correlation moves to
+> ~0.928 — outside this band. Re-run EXP-7 without `blocks_8` present.
+
+> **Row 14** is measured on the single-block model; the paper's Fig. 12
+> three-way figure uses the 8-block model (21.00 dB), hence the offset.
+
 ## Report-only — hardware-dependent, NOT scored (5)
 
 Reference is the authors' RTX PRO 6000; your absolute values **will differ**
@@ -52,9 +69,13 @@ Reference is the authors' RTX PRO 6000; your absolute values **will differ**
 |---|---|---|
 | 3DGS FPS @ 1080p | `exp6.summary.3dgs_fps` | 803.06 FPS |
 | ParaView FPS @ 1080p (280M pts) | `exp6.summary.paraview_fps` | 0.318 FPS |
-| Training peak GPU memory | `exp11.training_memory.peak_mb` | 10505 MB |
+| Training peak GPU memory | `exp11.training_memory.peak_mb` | 10505 MB ² |
 | Finetune wall time (60k iter) | `exp11.finetune_cost.finetune_time_min` | 14.4 min |
 | Raw → VTP conversion (280M pts) | `exp11.vtp_conversion.vtp_conversion_min` | 6.85 min |
+
+² Total nvidia-smi device usage during the S3 stage (includes CUDA context /
+co-resident processes). Paper Tab. VII prints 8.5 GB — the training process's
+allocator-level peak. Report-only either way.
 
 ---
 
