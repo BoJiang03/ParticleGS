@@ -108,12 +108,12 @@ of expected values + tolerances for manual cross-checking is in
 
 | Metric | Expected | Tol / rule | Paper |
 |---|---|---|---|
-| ParticleGS E25 — masked PSNR @ CR 290× | **26.28 dB** | ± 0.3 dB | Tab. 5 / R-D |
+| ParticleGS E25 — masked PSNR @ CR 290× | **26.28 dB** | ± 0.3 dB | Tab. VI / Fig. 8 |
 | SZ3 at matched CR (~292×) — masked PSNR | **18.57 dB** | ± 0.1 dB | R-D fig |
 | → ParticleGS lead at iso-CR | **+7.7 dB** | — | headline |
-| 4-block finetuned — PSNR / #G / size | 27.5 dB / 606k / 39.3 MB | ± 0.3 dB, ± 3 % | Tab. 3 |
+| 4-block finetuned — PSNR / #G / size | 27.5 dB / 606k / 39.3 MB | ± 0.3 dB, ± 3 % | Tab. III |
 | Particle recovery, 4-block — density corr | 0.923 | > 0.9 | recovery |
-| 3DGS vs ParaView render speedup | 2525× | > 100× | Tab. 6 |
+| 3DGS vs ParaView render speedup | 2525× | > 100× | Tab. VII |
 | Generalization, out-of-range radius | 20.67 dB | > 18 dB | gen. |
 
 Training carries ±3 % Gaussian-count / ±0.3 dB PSNR stochastic noise; the SZ3
