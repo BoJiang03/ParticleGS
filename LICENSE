@@ -1,0 +1,39 @@
+ParticleGS — Licensing
+======================
+
+This artifact contains code under several licenses. The layering is:
+
+1. Authors' code — Gaussian-Splatting Research License (INRIA/MPII)
+------------------------------------------------------------------
+All code written by the ParticleGS authors (the `particlegs/` package,
+`pipelines/`, `experiments/`, `scripts/`, `configs/`, `data/`,
+`verify_results.py`, and the build/reproduction tooling) is a derivative
+work of the INRIA/MPII "gaussian-splatting" codebase and is therefore
+distributed under the same terms: the Gaussian-Splatting Research
+License (non-commercial research and evaluation use; contact
+stip-sophia.transfert@inria.fr for other uses).
+
+Full license text: submodules/diff-gaussian-rasterization/LICENSE.md
+
+2. Vendored third-party components (keep their own licenses)
+------------------------------------------------------------
+- submodules/diff-gaussian-rasterization — Gaussian-Splatting Research
+  License (INRIA/MPII); see LICENSE.md therein. Its bundled
+  third_party/glm is MIT ("The Happy Bunny License" / MIT).
+- submodules/simple-knn — Gaussian-Splatting Research License
+  (INRIA/MPII); see LICENSE.md therein.
+- submodules/fused-ssim — MIT License (Copyright (c) 2024 Rahul Goel);
+  see LICENSE therein.
+
+3. Fetched at install time (not shipped in this repository)
+------------------------------------------------------------
+install.sh clones and builds the baseline compressors into SZ3/ and
+LCP/; both are BSD-licensed (Copyright UChicago Argonne, LLC — see
+copyright-and-BSD-license.txt in each cloned tree).
+
+4. Data (downloaded on first run, not shipped)
+----------------------------------------------
+- HACC particle subset — from SDRbench (https://sdrbench.github.io);
+  see SDRbench for dataset terms.
+- FIRE-2 L172 snapshot — CC BY 4.0 (Feedback In Realistic
+  Environments / FIRE collaboration public data release).

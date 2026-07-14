@@ -172,7 +172,8 @@ Full numerical tables land in `runs/summary/`.
 **Archival DOI:** *Zenodo, minted from the `sc26-final` release at artifact freeze* ·
 **Contact:** Bo Jiang \<bo.jiang@temple.edu\>
 
-**License:** authors' code under the Gaussian-Splatting Research License (INRIA,
-non-commercial research), inherited from `diff-gaussian-rasterization` / `simple-knn`.
-Third-party components keep their own licenses (see `LICENSE*` under each submodule;
-`fused-ssim` MIT, `glm` MIT). Citation BibTeX added with the camera-ready DOI.
+**License:** see the top-level [`LICENSE`](LICENSE) file for the full layering.
+In short: authors' code under the Gaussian-Splatting Research License (INRIA,
+non-commercial research), inherited from `diff-gaussian-rasterization` / `simple-knn`;
+third-party components keep their own licenses (`fused-ssim` MIT, `glm` MIT,
+SZ3/LCP BSD). Citation BibTeX added with the camera-ready DOI.
