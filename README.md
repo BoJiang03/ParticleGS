@@ -10,8 +10,9 @@ Reviewer quickstart for the **ParticleGS** paper (SC26, `pap525`):
 
 ```bash
 # Fast path for reviewers — verifies the 18 scored metrics. One command on a
-# bare node: it installs the env and runs. ~7 h on 1x RTX 6000 (fits the ~8 h
-# AE budget), ~2.2 h on 2x RTX PRO 6000. Set --num_gpus to your GPU count.
+# bare node: it installs the env and runs. ~7 h on a Chameleon Cloud
+# gpu_rtx6000 node (validated, see §2 — fits the ~8 h AE budget), ~2.2 h on
+# 2x RTX PRO 6000. Set --num_gpus to your GPU count.
 bash scripts/reproduce_ae.sh --num_gpus 1
 python verify_results.py --ae          # PASS/FAIL vs the paper
 
@@ -47,7 +48,8 @@ Target badges: **Results Reproduced** (primary), *Artifacts Evaluated — Functi
 | **GPU** | 1× CUDA GPU, ≥ 16 GB VRAM, compute ≥ 7.5 (Turing or newer). A **graphics-class** card (RTX PRO 6000 / RTX 6000 Ada / L40) is strongly preferred: ground-truth generation renders 280 M point-gaussians in ParaView, a fill-rate workload, so compute cards (A100/H100) are much slower here. `--num_gpus N` spreads rendering/training across N GPUs. |
 | **CPU / RAM / disk** | 32 GB RAM, ~40 GB free disk. |
 | **OS / driver** | Linux; NVIDIA driver supporting CUDA ≥ 12.4. |
-| **Authors' reference** | 1× RTX PRO 6000 Blackwell (96 GB) — the machine all absolute FPS/time/VRAM numbers were measured on. |
+| **Validated (AE)** | **Chameleon Cloud, CHI@UC site, `gpu_rtx6000` node type** (1× Quadro RTX 6000, Turing, 24 GB; image `CC-Ubuntu24.04-CUDA`): fast path **18/18 in ~7.0 h** from a bare node. This is the exact reviewer recipe — see §4. |
+| **Authors' reference** | 1× RTX PRO 6000 Blackwell (96 GB) — the machine all absolute FPS/time/VRAM numbers were measured on. Fast path from a fresh clone: 18/18 in ~2.2 h on 2× RTX PRO 6000. |
 
 **Software.** Everything installs into a conda env named `particlegs`. You don't
 need conda beforehand — `reproduce_ae.sh` installs Miniforge and builds the env
@@ -81,6 +83,24 @@ config) and the LCP baseline, and — using the shipped models — trains only t
 (A100/H100) is slower. Runs on a single GPU; more/faster GPUs cut wall-clock.
 Flags: `--no-setup` (skip env build), `--sequential` (disable parallel
 scheduling), `--gpu B` (base GPU).
+
+#### Validated recipe on Chameleon Cloud (recommended if you have no local GPU)
+
+We validated the fast path end-to-end on Chameleon; reproducing our exact
+setup takes three steps:
+
+1. On **CHI@UC** (`chi.uc.chameleoncloud.org`), reserve a bare-metal lease for
+   node type **`gpu_rtx6000`** (1× Quadro RTX 6000, Turing, 24 GB — check the
+   availability calendar a few days ahead; GPU nodes are popular).
+2. Launch it with the **`CC-Ubuntu24.04-CUDA`** image (ships an NVIDIA driver
+   new enough for the cu130 build; no conda needed — the script installs
+   Miniforge).
+3. `git clone https://github.com/BoJiang03/ParticleGS && cd ParticleGS`, then
+   run the TL;DR: `bash scripts/reproduce_ae.sh --num_gpus 1`.
+
+On this node the fast path completed in **~7 h 01 min with 18/18 metrics
+passing**. Avoid Chameleon's P100/V100 node types (Pascal/Volta — CUDA 13.0
+dropped them; Turing cc 7.5 is the floor).
 
 ### Full path — `reproduce.sh`
 
