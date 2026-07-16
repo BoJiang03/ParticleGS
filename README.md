@@ -14,7 +14,7 @@ Reviewer quickstart for the **ParticleGS** paper (SC26, `pap525`):
 # gpu_rtx6000 node (validated, see §2 — fits the ~8 h AE budget), ~2.2 h on
 # 2x RTX PRO 6000. Set --num_gpus to your GPU count.
 bash scripts/reproduce_ae.sh --num_gpus 1
-python verify_results.py --ae          # PASS/FAIL vs the paper
+python verify_results.py --ae          # PASS/FAIL vs the reference values
 
 # Full reproduction — retrains everything, all 26 metrics (~11–15 h).
 bash scripts/reproduce.sh --num_gpus 1
@@ -34,12 +34,13 @@ The full path ships nothing and retrains from the raw particles.
 Target badges: **Results Reproduced** (primary), *Artifacts Evaluated — Functional*,
 *Artifacts Available* (Zenodo DOI).
 
-`verify_results.py` scores each metric in one of two tiers:
+`verify_results.py` scores each metric in one of three classes:
 
 - **Hardware-independent** (PSNR, Gaussian count, model size, compression ratio) —
   must match our reference within small tolerances on any GPU.
-- **Hardware-dependent** (absolute FPS, wall-clock, peak VRAM) — reported only;
-  check the *trend* (e.g. 3DGS ≫ ParaView FPS), not the exact figure.
+- **Trend** (e.g. 3DGS > 100× ParaView FPS) — enforced, but only as an
+  order-of-magnitude rule, never as an exact figure.
+- **Hardware-dependent** (absolute FPS, wall-clock, peak VRAM) — reported only.
 
 ## 2. Requirements
 
@@ -136,7 +137,7 @@ of expected values + tolerances for manual cross-checking is in
 | → ParticleGS lead at iso-CR | **+7.7 dB** | — | headline |
 | 4-block finetuned — PSNR / #G / size | 27.5 dB / 606k / 39.3 MB | ± 0.3 dB, ± 3 % | Tab. III ¹ |
 | Particle recovery, 4-block — density corr | 0.923 | > 0.9 | recovery |
-| 3DGS vs ParaView render speedup | 2525× | > 100× | Tab. VII |
+| 3DGS vs ParaView render speedup | 2525× | > 100× | Tab. VII ² |
 | Generalization, out-of-range radius | 20.67 dB | > 18 dB | gen. |
 
 ¹ The artifact enforces **masked** PSNR (foreground pixels, the stricter
@@ -144,6 +145,8 @@ metric); the paper's tables print **full-image** PSNR — Tab. VI single-block
 28.80 dB, Tab. III 4-block 29.94 dB, Tab. IV FIRE-2 29.27 dB. Both metrics
 come from the same renders; the masked references here are what
 `verify_results.py` scores.
+² Re-measured on the artifact's 4-block model; paper Tab. VII prints 2386× for
+the 8-block model. Only the > 100× trend is scored.
 
 Training carries ±3 % Gaussian-count / ±0.3 dB PSNR stochastic noise; the SZ3
 baseline is deterministic (hence the tight tolerance). The full run adds the
