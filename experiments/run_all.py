@@ -33,7 +33,9 @@ import math
 import os
 import subprocess
 import sys
+import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 from experiments.common import PARTICLEGS_ROOT, PYTHON_BIN, RUNS_DIR, ensure_shared_data
@@ -118,6 +120,91 @@ def _fmt_dur(seconds):
     if m < 60:
         return f"{m}m"
     return f"{m // 60}h{m % 60:02d}m"
+
+
+def _tree_cpu_seconds(root_pid):
+    """Total CPU seconds (utime+stime, incl. reaped children's cutime/cstime)
+    consumed by `root_pid` and all live descendants, read from /proc. This is
+    the liveness signal the tickers compare between two samples: a working
+    phase (training, ParaView render, SZ3, the CPU particle compare) burns CPU
+    continuously, while a hung process tree goes flat. Returns None if /proc
+    is unavailable (non-Linux) — callers then fall back to elapsed-only lines."""
+    try:
+        hz = os.sysconf("SC_CLK_TCK")
+        procs = {}
+        for d in os.listdir("/proc"):
+            if not d.isdigit():
+                continue
+            try:
+                with open(f"/proc/{d}/stat") as f:
+                    st = f.read()
+            except OSError:
+                continue  # process exited mid-scan
+            # comm (field 2) may contain spaces/parens — split after last ')'
+            rest = st[st.rindex(")") + 2:].split()
+            # rest[0]=state, [1]=ppid, [11]/[12]=utime/stime, [13]/[14]=cutime/cstime
+            procs[int(d)] = (int(rest[1]),
+                             int(rest[11]) + int(rest[12])
+                             + int(rest[13]) + int(rest[14]))
+        kids = {}
+        for pid, (ppid, _) in procs.items():
+            kids.setdefault(ppid, []).append(pid)
+        total, stack = 0, [root_pid]
+        while stack:
+            p = stack.pop()
+            if p in procs:
+                total += procs[p][1]
+                stack.extend(kids.get(p, []))
+        return total / hz
+    except Exception:
+        return None
+
+
+@contextmanager
+def _alive_ticker(tag, expected_min=None, interval=300, pid=None):
+    """Print a periodic liveness line while a long blocking call runs in the
+    foreground. Several phases are silent for many minutes at a stretch
+    (ParaView GT rendering, SZ3 compression, EXP-7's CPU particle compare),
+    and a reviewer watching the terminal cannot tell 'quiet but working' from
+    'hung'. The line is NOT a bare we-are-still-looping print: each tick
+    samples the CPU time of the process tree rooted at `pid` and compares it
+    to the previous tick — real work burns CPU, so [alive] reports the CPU
+    consumed in the window, and a near-flat window prints [warn ] ... possibly
+    stuck instead. stdout is NOT piped or intercepted: the child keeps the
+    terminal, so tqdm bars and pvbatch output are untouched."""
+    t0 = time.time()
+    stop = threading.Event()
+    state = {"cpu": _tree_cpu_seconds(pid) if pid else None}
+
+    def _tick():
+        while not stop.wait(interval):
+            el = time.time() - t0
+            eta = (f", expected ~{expected_min} min on {_AE_EXPECTED_GPU}"
+                   if expected_min else "")
+            cpu = _tree_cpu_seconds(pid) if pid else None
+            if cpu is not None and state["cpu"] is not None:
+                delta = cpu - state["cpu"]
+                if delta < 0.01 * interval:
+                    print(f"  [warn ] {tag} used only {delta:.0f}s CPU in the "
+                          f"last {_fmt_dur(interval)} ({_fmt_dur(el)} elapsed"
+                          f"{eta}) — possibly stuck (or a slow download); "
+                          f"check the output above / nvidia-smi")
+                else:
+                    print(f"  [alive] {tag} still working ({_fmt_dur(el)} "
+                          f"elapsed{eta}; {delta:.0f}s CPU consumed in the "
+                          f"last {_fmt_dur(interval)})")
+            else:
+                print(f"  [alive] {tag} still running "
+                      f"({_fmt_dur(el)} elapsed{eta})")
+            state["cpu"] = cpu
+
+    th = threading.Thread(target=_tick, daemon=True)
+    th.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        th.join(timeout=1)
 
 
 def _print_progress(tail=""):
@@ -223,14 +310,16 @@ def run_experiment(exp_num, module_name, description, gpu, extra_args=None,
         cmd.extend(extra_args)
 
     t0 = time.time()
-    result = subprocess.run(cmd, cwd=str(PARTICLEGS_ROOT))
+    proc = subprocess.Popen(cmd, cwd=str(PARTICLEGS_ROOT))
+    with _alive_ticker(f"EXP-{exp_num}", expected_min, pid=proc.pid):
+        rc = proc.wait()
     elapsed = time.time() - t0
 
-    status = "OK" if result.returncode == 0 else "FAILED"
+    status = "OK" if rc == 0 else "FAILED"
     eta = (f"; expected ~{expected_min} min on {_AE_EXPECTED_GPU}"
            if expected_min else "")
     print(f"\n  EXP-{exp_num} {status} ({elapsed/60:.1f} min{eta})")
-    return result.returncode == 0
+    return rc == 0
 
 
 # ── Parallel (AE) scheduling ────────────────────────────────────────────────
@@ -282,6 +371,16 @@ def _reap(job, results):
     return ok
 
 
+def _wait_and_reap(job, results):
+    """Block on one background job, but keep the 120 s heartbeat going — used
+    by the isolated segments (EXP-1/6/11), whose output goes to a log file and
+    would otherwise leave the terminal silent for the whole experiment."""
+    while job["proc"].poll() is None:
+        time.sleep(5)
+        _heartbeat([job])
+    return _reap(job, results)
+
+
 _HEARTBEAT = {"last": 0.0}
 
 
@@ -296,8 +395,17 @@ def _heartbeat(running, interval=120):
     for j in sorted(running, key=lambda j: j["num"]):
         exp_min = _AE_EXPECTED_MIN.get(j["num"])
         eta = f"/~{exp_min}m" if exp_min else ""
+        # Same stuck-detection as _alive_ticker: compare the job's process-tree
+        # CPU time against the previous heartbeat — flat means possibly hung.
+        cpu = _tree_cpu_seconds(j["proc"].pid)
+        mark = ""
+        if cpu is not None and j.get("hb_cpu") is not None:
+            dt = now - j["hb_t"]
+            if dt > 0 and (cpu - j["hb_cpu"]) < 0.01 * dt:
+                mark = " LOW CPU — possibly stuck, check log"
+        j["hb_cpu"], j["hb_t"] = cpu, now
         parts.append(f"EXP-{j['num']} ({_fmt_dur(now - j['t0'])}{eta}, "
-                     f"GPU {j['gpu']})")
+                     f"GPU {j['gpu']}{mark})")
     _print_progress(tail=f" | running: {', '.join(parts)}")
 
 
@@ -457,7 +565,7 @@ def run_ae_parallel(exp_nums, num_gpus, ae_quick, logdir):
         job = _spawn(1, gpus[0],
                      (["--ae", "--use_pretrained_e25"] if ae_quick else []), True,
                      logdir / "exp1.log", env=full_env)
-        _reap(job, results)
+        _wait_and_reap(job, results)
         if not results.get(1, False):
             print("  WARNING: EXP-1 failed; EXP-6/7/8/14 depend on its model.")
 
@@ -476,7 +584,7 @@ def run_ae_parallel(exp_nums, num_gpus, ae_quick, logdir):
               f"timing/perf ===\n{'='*70}")
         job = _spawn(n, gpus[0], (["--ae"] if ae_quick else []), True,
                      logdir / f"exp{n}.log", env=full_env)
-        _reap(job, results)
+        _wait_and_reap(job, results)
 
     return results
 
@@ -536,7 +644,11 @@ def main():
               f"conversion + eval GT render; seconds if already cached)")
     t0_total = time.time()
     t0_prep = time.time()
-    ensure_shared_data(gpu=args.gpu)
+    # Monitor our own process tree: ensure_shared_data runs in-process but does
+    # its heavy lifting (VTP conversion, pvbatch GT renders) in subprocesses.
+    with _alive_ticker("shared data prep", 30 if args.ae else None,
+                       pid=os.getpid()):
+        ensure_shared_data(gpu=args.gpu)
     prep_min = (time.time() - t0_prep) / 60
     if args.ae:
         print(f"  shared data prep done ({prep_min:.1f} min; expected ~30 min "
