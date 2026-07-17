@@ -195,26 +195,26 @@ def _alive_ticker(tag, expected_min=None, interval=300, pid=None):
     def _tick():
         while not stop.wait(interval):
             el = time.time() - t0
-            eta = (f", expected ~{expected_min} min on {_AE_EXPECTED_GPU}"
-                   if expected_min else "")
+            # "42m/~75m (56%)" — elapsed vs expected on the validated GPU
+            # (named once in the banner), and the fraction of it used.
+            prog = (f"{_fmt_dur(el)}/~{expected_min}m "
+                    f"({100 * el / (expected_min * 60):.0f}%)"
+                    if expected_min else _fmt_dur(el))
             act = _tree_activity(pid) if pid else None
             if act is not None and state["act"] is not None:
                 dcpu = act[0] - state["act"][0]
                 dio = act[1] - state["act"][1]
-                used = (f"{dcpu:.0f}s CPU + {dio / 1048576:.0f} MiB IO "
-                        f"in the last {_fmt_dur(interval)}")
+                used = (f"cpu {dcpu:.0f}s io {dio / 1048576:.0f}MiB "
+                        f"/{_fmt_dur(interval)}")
                 # ≥1% of one core, or ≥1 MiB of read/write syscall traffic,
                 # counts as progress; flat on both means nothing is moving.
                 if dcpu < 0.01 * interval and dio < 1048576:
-                    print(f"  [warn ] {tag} used only {used} ({_fmt_dur(el)} "
-                          f"elapsed{eta}) — possibly stuck; check the output "
-                          f"above / nvidia-smi")
+                    print(f"  [warn ] {tag}  {prog}  {used} — possibly stuck; "
+                          f"check output above / nvidia-smi")
                 else:
-                    print(f"  [alive] {tag} still working ({_fmt_dur(el)} "
-                          f"elapsed{eta}; {used})")
+                    print(f"  [alive] {tag}  {prog}  {used}")
             else:
-                print(f"  [alive] {tag} still running "
-                      f"({_fmt_dur(el)} elapsed{eta})")
+                print(f"  [alive] {tag}  {prog}")
             state["act"] = act
 
     th = threading.Thread(target=_tick, daemon=True)
@@ -413,7 +413,9 @@ def _heartbeat(running, interval=120):
     parts = []
     for j in sorted(running, key=lambda j: j["num"]):
         exp_min = _AE_EXPECTED_MIN.get(j["num"])
-        eta = f"/~{exp_min}m" if exp_min else ""
+        el = now - j["t0"]
+        eta = (f"/~{exp_min}m {100 * el / (exp_min * 60):.0f}%"
+               if exp_min else "")
         # Same stuck-detection as _alive_ticker: compare the job's process-tree
         # CPU time and IO volume against the previous heartbeat — flat on both
         # means possibly hung.
