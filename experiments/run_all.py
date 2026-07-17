@@ -94,10 +94,13 @@ _COLD_COST_MIN = {13: 68, 7: 52, 11: 52, 6: 32, 8: 11, 14: 11, 1: 80, 4: 150}
 # CC-Ubuntu24.04-CUDA image). Printed at launch, in the heartbeat, and at
 # finish, so a reviewer watching a multi-hour run can tell "slow but alive"
 # from "stuck". These are per-experiment expectations only; shared data prep
-# (VTP conversion + eval GT render, before EXP-1) adds ~30 min on top.
-# NOTE: first-round rough estimates — replace with the per-experiment times
-# from the measured Chameleon validation log.
-_AE_EXPECTED_MIN = {1: 45, 4: 40, 6: 35, 7: 75, 8: 25, 11: 60, 14: 80}
+# (VTP conversion + eval GT render, before EXP-1) adds ~20 min on top, and
+# the conda env build (~10 min) + 3.9 GB data download (~3 min) happen even
+# earlier, in reproduce_ae.sh, outside these timers.
+# Measured on the 2026-07 Chameleon validation run (fast path, sequential
+# single GPU, all 18 metrics PASS): EXP-1 33.9, EXP-4 44.5, EXP-6 36.2,
+# EXP-7 87.3, EXP-8 23.6, EXP-11 72.6, EXP-14 75.9, prep ~20 min.
+_AE_EXPECTED_MIN = {1: 34, 4: 45, 6: 36, 7: 87, 8: 24, 11: 73, 14: 76}
 _AE_EXPECTED_GPU = "1x RTX 6000"
 
 # Metric-path prefixes not enforced in the AE fast path (mirrors verify --ae).
@@ -679,7 +682,7 @@ def main():
                   f"({_AE_EXPECTED_GPU}, single GPU):")
             print("  " + "  ".join(f"EXP-{n} ~{_AE_EXPECTED_MIN[n]}m"
                                    for n in known))
-            print(f"  sequential sum ~{_fmt_dur(total * 60)} + ~30m shared data "
+            print(f"  sequential sum ~{_fmt_dur(total * 60)} + ~20m shared data "
                   f"prep (multi-GPU overlaps Segment 2; other GPUs differ)")
     print()
 
@@ -689,19 +692,19 @@ def main():
     print("Preparing shared data...")
     print("="*70)
     if args.ae:
-        print(f"(expected ~30 min on {_AE_EXPECTED_GPU} when cold: one-time VTP "
+        print(f"(expected ~20 min on {_AE_EXPECTED_GPU} when cold: one-time VTP "
               f"conversion + eval GT render; seconds if already cached)")
     t0_total = time.time()
     t0_prep = time.time()
     # Monitor our own process tree: ensure_shared_data runs in-process but does
     # its heavy lifting (VTP conversion, pvbatch GT renders) in subprocesses.
-    with _alive_ticker("shared data prep", 30 if args.ae else None,
+    with _alive_ticker("shared data prep", 20 if args.ae else None,
                        pid=os.getpid()):
         ensure_shared_data(gpu=args.gpu)
     prep_min = (time.time() - t0_prep) / 60
     if args.ae:
-        print(f"  shared data prep done ({prep_min:.1f} min; expected ~30 min "
-              f"cold on {_AE_EXPECTED_GPU})")
+        print(f"  shared data prep done  {prep_min:.1f}m/~20m "
+              f"({100 * prep_min / 20:.0f}%)")
 
     # Step 2: Run experiments
     if parallel:
