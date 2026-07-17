@@ -122,13 +122,19 @@ def _fmt_dur(seconds):
     return f"{m // 60}h{m % 60:02d}m"
 
 
-def _tree_cpu_seconds(root_pid):
-    """Total CPU seconds (utime+stime, incl. reaped children's cutime/cstime)
-    consumed by `root_pid` and all live descendants, read from /proc. This is
-    the liveness signal the tickers compare between two samples: a working
-    phase (training, ParaView render, SZ3, the CPU particle compare) burns CPU
-    continuously, while a hung process tree goes flat. Returns None if /proc
-    is unavailable (non-Linux) — callers then fall back to elapsed-only lines."""
+def _tree_activity(root_pid):
+    """(cpu_seconds, io_chars) consumed by `root_pid` and all live descendants,
+    read from /proc. Two complementary progress signals, compared between two
+    ticker samples: compute-bound phases (training, ParaView render, SZ3, the
+    CPU particle compare) burn CPU continuously, while IO-bound phases (the
+    3.4 GB data download, VTP writes) may use little CPU but keep rchar/wchar
+    (all read/write syscalls, sockets included) climbing. A genuinely hung
+    tree — deadlock, futex wait, dead EGL context — goes flat on BOTH. CPU
+    counts reaped children via cutime/cstime; a spinning-but-stuck process is
+    the one case this cannot distinguish from work (the per-experiment
+    expected times and the final verify pass are the backstop for that).
+    Returns None if /proc is unavailable (non-Linux) — callers then fall back
+    to elapsed-only lines."""
     try:
         hz = os.sysconf("SC_CLK_TCK")
         procs = {}
@@ -143,19 +149,28 @@ def _tree_cpu_seconds(root_pid):
             # comm (field 2) may contain spaces/parens — split after last ')'
             rest = st[st.rindex(")") + 2:].split()
             # rest[0]=state, [1]=ppid, [11]/[12]=utime/stime, [13]/[14]=cutime/cstime
-            procs[int(d)] = (int(rest[1]),
-                             int(rest[11]) + int(rest[12])
-                             + int(rest[13]) + int(rest[14]))
+            cpu = (int(rest[11]) + int(rest[12])
+                   + int(rest[13]) + int(rest[14]))
+            io = 0
+            try:
+                with open(f"/proc/{d}/io") as f:
+                    for line in f:
+                        if line.startswith(("rchar:", "wchar:")):
+                            io += int(line.split()[1])
+            except OSError:
+                pass  # exited mid-scan or not ours; CPU signal still counts
+            procs[int(d)] = (int(rest[1]), cpu, io)
         kids = {}
-        for pid, (ppid, _) in procs.items():
+        for pid, (ppid, _, _) in procs.items():
             kids.setdefault(ppid, []).append(pid)
-        total, stack = 0, [root_pid]
+        cpu_total, io_total, stack = 0, 0, [root_pid]
         while stack:
             p = stack.pop()
             if p in procs:
-                total += procs[p][1]
+                cpu_total += procs[p][1]
+                io_total += procs[p][2]
                 stack.extend(kids.get(p, []))
-        return total / hz
+        return cpu_total / hz, io_total
     except Exception:
         return None
 
@@ -167,36 +182,40 @@ def _alive_ticker(tag, expected_min=None, interval=300, pid=None):
     (ParaView GT rendering, SZ3 compression, EXP-7's CPU particle compare),
     and a reviewer watching the terminal cannot tell 'quiet but working' from
     'hung'. The line is NOT a bare we-are-still-looping print: each tick
-    samples the CPU time of the process tree rooted at `pid` and compares it
-    to the previous tick — real work burns CPU, so [alive] reports the CPU
-    consumed in the window, and a near-flat window prints [warn ] ... possibly
-    stuck instead. stdout is NOT piped or intercepted: the child keeps the
-    terminal, so tqdm bars and pvbatch output are untouched."""
+    samples the CPU time and IO volume of the process tree rooted at `pid`
+    and compares them to the previous tick — real work moves at least one of
+    the two, so [alive] reports what was consumed in the window, and a window
+    flat on BOTH prints [warn ] ... possibly stuck instead. stdout is NOT
+    piped or intercepted: the child keeps the terminal, so tqdm bars and
+    pvbatch output are untouched."""
     t0 = time.time()
     stop = threading.Event()
-    state = {"cpu": _tree_cpu_seconds(pid) if pid else None}
+    state = {"act": _tree_activity(pid) if pid else None}
 
     def _tick():
         while not stop.wait(interval):
             el = time.time() - t0
             eta = (f", expected ~{expected_min} min on {_AE_EXPECTED_GPU}"
                    if expected_min else "")
-            cpu = _tree_cpu_seconds(pid) if pid else None
-            if cpu is not None and state["cpu"] is not None:
-                delta = cpu - state["cpu"]
-                if delta < 0.01 * interval:
-                    print(f"  [warn ] {tag} used only {delta:.0f}s CPU in the "
-                          f"last {_fmt_dur(interval)} ({_fmt_dur(el)} elapsed"
-                          f"{eta}) — possibly stuck (or a slow download); "
-                          f"check the output above / nvidia-smi")
+            act = _tree_activity(pid) if pid else None
+            if act is not None and state["act"] is not None:
+                dcpu = act[0] - state["act"][0]
+                dio = act[1] - state["act"][1]
+                used = (f"{dcpu:.0f}s CPU + {dio / 1048576:.0f} MiB IO "
+                        f"in the last {_fmt_dur(interval)}")
+                # ≥1% of one core, or ≥1 MiB of read/write syscall traffic,
+                # counts as progress; flat on both means nothing is moving.
+                if dcpu < 0.01 * interval and dio < 1048576:
+                    print(f"  [warn ] {tag} used only {used} ({_fmt_dur(el)} "
+                          f"elapsed{eta}) — possibly stuck; check the output "
+                          f"above / nvidia-smi")
                 else:
                     print(f"  [alive] {tag} still working ({_fmt_dur(el)} "
-                          f"elapsed{eta}; {delta:.0f}s CPU consumed in the "
-                          f"last {_fmt_dur(interval)})")
+                          f"elapsed{eta}; {used})")
             else:
                 print(f"  [alive] {tag} still running "
                       f"({_fmt_dur(el)} elapsed{eta})")
-            state["cpu"] = cpu
+            state["act"] = act
 
     th = threading.Thread(target=_tick, daemon=True)
     th.start()
@@ -396,14 +415,16 @@ def _heartbeat(running, interval=120):
         exp_min = _AE_EXPECTED_MIN.get(j["num"])
         eta = f"/~{exp_min}m" if exp_min else ""
         # Same stuck-detection as _alive_ticker: compare the job's process-tree
-        # CPU time against the previous heartbeat — flat means possibly hung.
-        cpu = _tree_cpu_seconds(j["proc"].pid)
+        # CPU time and IO volume against the previous heartbeat — flat on both
+        # means possibly hung.
+        act = _tree_activity(j["proc"].pid)
         mark = ""
-        if cpu is not None and j.get("hb_cpu") is not None:
+        if act is not None and j.get("hb_act") is not None:
             dt = now - j["hb_t"]
-            if dt > 0 and (cpu - j["hb_cpu"]) < 0.01 * dt:
-                mark = " LOW CPU — possibly stuck, check log"
-        j["hb_cpu"], j["hb_t"] = cpu, now
+            if (dt > 0 and (act[0] - j["hb_act"][0]) < 0.01 * dt
+                    and (act[1] - j["hb_act"][1]) < 1048576):
+                mark = " NO CPU/IO ACTIVITY — possibly stuck, check log"
+        j["hb_act"], j["hb_t"] = act, now
         parts.append(f"EXP-{j['num']} ({_fmt_dur(now - j['t0'])}{eta}, "
                      f"GPU {j['gpu']}{mark})")
     _print_progress(tail=f" | running: {', '.join(parts)}")
