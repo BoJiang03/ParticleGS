@@ -335,9 +335,10 @@ def run_experiment(exp_num, module_name, description, gpu, extra_args=None,
     elapsed = time.time() - t0
 
     status = "OK" if rc == 0 else "FAILED"
-    eta = (f"; expected ~{expected_min} min on {_AE_EXPECTED_GPU}"
-           if expected_min else "")
-    print(f"\n  EXP-{exp_num} {status} ({elapsed/60:.1f} min{eta})")
+    t = (f"{elapsed / 60:.1f}m/~{expected_min}m "
+         f"({100 * elapsed / (expected_min * 60):.0f}%)"
+         if expected_min else f"{elapsed / 60:.1f}m")
+    print(f"\n  EXP-{exp_num} {status}  {t}")
     return rc == 0
 
 
@@ -367,7 +368,7 @@ def _spawn(exp_num, gpu, extra_args, skip_data_prep, log_path, gpus_held=None, e
     proc = subprocess.Popen(cmd, cwd=str(PARTICLEGS_ROOT),
                             stdout=logf, stderr=subprocess.STDOUT, env=env)
     exp_min = _AE_EXPECTED_MIN.get(exp_num)
-    eta = (f"; expected ~{exp_min} min on {_AE_EXPECTED_GPU}" if exp_min else "")
+    eta = f", expected ~{exp_min}m" if exp_min else ""
     print(f"  [launch] EXP-{exp_num:<2d} on GPU {gpu}  (log: {log_path.name}{eta})")
     return {"num": exp_num, "gpu": gpu, "proc": proc, "log": logf,
             "t0": time.time(), "path": log_path,
@@ -382,9 +383,10 @@ def _reap(job, results):
     el = (time.time() - job["t0"]) / 60
     _PROGRESS["done"] += 1
     exp_min = _AE_EXPECTED_MIN.get(job["num"])
-    eta = (f"; expected ~{exp_min} min on {_AE_EXPECTED_GPU}" if exp_min else "")
-    print(f"\n  [ done ] EXP-{job['num']:<2d} {'OK' if ok else 'FAILED'} "
-          f"({el:.1f} min{eta}, GPU {job['gpu']})")
+    t = (f"{el:.1f}m/~{exp_min}m ({100 * el / exp_min:.0f}%)"
+         if exp_min else f"{el:.1f}m")
+    print(f"\n  [ done ] EXP-{job['num']:<2d} {'OK' if ok else 'FAILED'}  "
+          f"{t}  GPU {job['gpu']}")
     _digest_experiment(job["num"])
     _print_progress()
     return ok
