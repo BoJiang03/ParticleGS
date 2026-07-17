@@ -87,6 +87,17 @@ NEEDS_EXP1 = {6, 7, 8, 14}
 # Approximate cold single-GPU wall-clock (min), for longest-first pool ordering.
 _COLD_COST_MIN = {13: 68, 7: 52, 11: 52, 6: 32, 8: 11, 14: 11, 1: 80, 4: 150}
 
+# Expected AE-mode wall-clock per experiment (minutes) on the VALIDATED reviewer
+# recipe — 1x Quadro RTX 6000, single GPU (Chameleon gpu_rtx_6000 node,
+# CC-Ubuntu24.04-CUDA image). Printed at launch, in the heartbeat, and at
+# finish, so a reviewer watching a multi-hour run can tell "slow but alive"
+# from "stuck". These are per-experiment expectations only; shared data prep
+# (VTP conversion + eval GT render, before EXP-1) adds ~30 min on top.
+# NOTE: first-round rough estimates — replace with the per-experiment times
+# from the measured Chameleon validation log.
+_AE_EXPECTED_MIN = {1: 45, 4: 40, 6: 35, 7: 75, 8: 25, 11: 60, 14: 80}
+_AE_EXPECTED_GPU = "1x RTX 6000"
+
 # Metric-path prefixes not enforced in the AE fast path (mirrors verify --ae).
 AE_SKIP_PREFIXES = ("exp_fire2.", "exp4.blocks_2.", "exp1.exp1c_lcp.")
 
@@ -196,10 +207,13 @@ def _exp_cmd(exp_num, gpu, extra_args, skip_data_prep):
 
 
 def run_experiment(exp_num, module_name, description, gpu, extra_args=None,
-                   skip_data_prep=True):
+                   skip_data_prep=True, expected_min=None):
     """Run one experiment as a subprocess (blocking, inherits stdout)."""
     print(f"\n{'#'*70}")
     print(f"# EXP-{exp_num}: {description}")
+    if expected_min:
+        print(f"# expected ~{expected_min} min on {_AE_EXPECTED_GPU} "
+              f"(validated recipe; other GPUs differ)")
     print(f"{'#'*70}\n")
 
     cmd = [PYTHON_BIN, "-m", f"experiments.{module_name}", "--gpu", str(gpu)]
@@ -213,7 +227,9 @@ def run_experiment(exp_num, module_name, description, gpu, extra_args=None,
     elapsed = time.time() - t0
 
     status = "OK" if result.returncode == 0 else "FAILED"
-    print(f"\n  EXP-{exp_num} {status} ({elapsed/60:.1f} min)")
+    eta = (f"; expected ~{expected_min} min on {_AE_EXPECTED_GPU}"
+           if expected_min else "")
+    print(f"\n  EXP-{exp_num} {status} ({elapsed/60:.1f} min{eta})")
     return result.returncode == 0
 
 
@@ -242,7 +258,9 @@ def _spawn(exp_num, gpu, extra_args, skip_data_prep, log_path, gpus_held=None, e
     logf.flush()
     proc = subprocess.Popen(cmd, cwd=str(PARTICLEGS_ROOT),
                             stdout=logf, stderr=subprocess.STDOUT, env=env)
-    print(f"  [launch] EXP-{exp_num:<2d} on GPU {gpu}  (log: {log_path.name})")
+    exp_min = _AE_EXPECTED_MIN.get(exp_num)
+    eta = (f"; expected ~{exp_min} min on {_AE_EXPECTED_GPU}" if exp_min else "")
+    print(f"  [launch] EXP-{exp_num:<2d} on GPU {gpu}  (log: {log_path.name}{eta})")
     return {"num": exp_num, "gpu": gpu, "proc": proc, "log": logf,
             "t0": time.time(), "path": log_path,
             "gpus_held": list(gpus_held) if gpus_held is not None else [gpu]}
@@ -255,8 +273,10 @@ def _reap(job, results):
     results[job["num"]] = ok
     el = (time.time() - job["t0"]) / 60
     _PROGRESS["done"] += 1
+    exp_min = _AE_EXPECTED_MIN.get(job["num"])
+    eta = (f"; expected ~{exp_min} min on {_AE_EXPECTED_GPU}" if exp_min else "")
     print(f"\n  [ done ] EXP-{job['num']:<2d} {'OK' if ok else 'FAILED'} "
-          f"({el:.1f} min, GPU {job['gpu']})")
+          f"({el:.1f} min{eta}, GPU {job['gpu']})")
     _digest_experiment(job["num"])
     _print_progress()
     return ok
@@ -272,8 +292,12 @@ def _heartbeat(running, interval=120):
     if not running or now - _HEARTBEAT["last"] < interval:
         return
     _HEARTBEAT["last"] = now
-    parts = [f"EXP-{j['num']} ({_fmt_dur(now - j['t0'])}, GPU {j['gpu']})"
-             for j in sorted(running, key=lambda j: j["num"])]
+    parts = []
+    for j in sorted(running, key=lambda j: j["num"]):
+        exp_min = _AE_EXPECTED_MIN.get(j["num"])
+        eta = f"/~{exp_min}m" if exp_min else ""
+        parts.append(f"EXP-{j['num']} ({_fmt_dur(now - j['t0'])}{eta}, "
+                     f"GPU {j['gpu']})")
     _print_progress(tail=f" | running: {', '.join(parts)}")
 
 
@@ -490,6 +514,16 @@ def main():
     print(f"GPU base: {args.gpu}   num_gpus: {args.num_gpus}   "
           f"mode: {'parallel' if parallel else 'sequential'}")
     print(f"Output: {RUNS_DIR}")
+    if args.ae:
+        known = [n for n in exp_nums if n in _AE_EXPECTED_MIN]
+        if known:
+            total = sum(_AE_EXPECTED_MIN[n] for n in known)
+            print(f"Expected per-experiment wall-clock on the validated recipe "
+                  f"({_AE_EXPECTED_GPU}, single GPU):")
+            print("  " + "  ".join(f"EXP-{n} ~{_AE_EXPECTED_MIN[n]}m"
+                                   for n in known))
+            print(f"  sequential sum ~{_fmt_dur(total * 60)} + ~30m shared data "
+                  f"prep (multi-GPU overlaps Segment 2; other GPUs differ)")
     print()
 
     # Step 1: Prepare shared data ONCE (VTP, normalization, PLY, eval GT images)
@@ -497,8 +531,16 @@ def main():
     print("="*70)
     print("Preparing shared data...")
     print("="*70)
+    if args.ae:
+        print(f"(expected ~30 min on {_AE_EXPECTED_GPU} when cold: one-time VTP "
+              f"conversion + eval GT render; seconds if already cached)")
     t0_total = time.time()
+    t0_prep = time.time()
     ensure_shared_data(gpu=args.gpu)
+    prep_min = (time.time() - t0_prep) / 60
+    if args.ae:
+        print(f"  shared data prep done ({prep_min:.1f} min; expected ~30 min "
+              f"cold on {_AE_EXPECTED_GPU})")
 
     # Step 2: Run experiments
     if parallel:
@@ -530,7 +572,9 @@ def main():
                 if args.ae:
                     extra.append("--use_pretrained_blocks")  # 1+4+1 → 1+1
             ok = run_experiment(num, module, desc, args.gpu, extra_args=extra,
-                                skip_data_prep=num not in SELF_PREP_EXPERIMENTS)
+                                skip_data_prep=num not in SELF_PREP_EXPERIMENTS,
+                                expected_min=(_AE_EXPECTED_MIN.get(num)
+                                              if args.ae else None))
             results[num] = ok
             _PROGRESS["done"] += 1
             if args.ae:
