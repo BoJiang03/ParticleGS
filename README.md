@@ -11,7 +11,7 @@ Reviewer quickstart for the **ParticleGS** paper (SC26, `pap525`):
 ```bash
 # Fast path for reviewers — verifies the 18 scored metrics. One command on a
 # bare node: it installs the env and runs. ~7 h on a Chameleon Cloud
-# gpu_rtx6000 node (validated, see §2 — fits the ~8 h AE budget), ~2.2 h on
+# gpu_rtx_6000 node (validated, see §2 — fits the ~8 h AE budget), ~2.2 h on
 # 2x RTX PRO 6000. Set --num_gpus to your GPU count.
 bash scripts/reproduce_ae.sh --num_gpus 1
 python verify_results.py --ae          # PASS/FAIL vs the reference values
@@ -49,7 +49,7 @@ Target badges: **Results Reproduced** (primary), *Artifacts Evaluated — Functi
 | **GPU** | 1× CUDA GPU, ≥ 16 GB VRAM, compute ≥ 7.5 (Turing or newer). A **graphics-class** card (RTX PRO 6000 / RTX 6000 Ada / L40) is strongly preferred: ground-truth generation renders 280 M point-gaussians in ParaView, a fill-rate workload, so compute cards (A100/H100) are much slower here. `--num_gpus N` spreads rendering/training across N GPUs. |
 | **CPU / RAM / disk** | 32 GB RAM, ~40 GB free disk. |
 | **OS / driver** | Linux; NVIDIA driver supporting CUDA ≥ 12.4. |
-| **Validated (AE)** | **Chameleon Cloud, CHI@UC site, `gpu_rtx6000` node type** (1× Quadro RTX 6000, Turing, 24 GB; image `CC-Ubuntu24.04-CUDA`): fast path **18/18 in ~7.0 h** from a bare node. This is the exact reviewer recipe — see §4. |
+| **Validated (AE)** | **Chameleon Cloud, CHI@UC site, `gpu_rtx_6000` node type** (1× Quadro RTX 6000, Turing, 24 GB; image `CC-Ubuntu24.04-CUDA`): fast path **18/18 in ~7.0 h** from a bare node. This is the exact reviewer recipe — see §4. |
 | **Authors' reference** | 1× RTX PRO 6000 Blackwell (96 GB) — the machine all absolute FPS/time/VRAM numbers were measured on. Fast path from a fresh clone: 18/18 in ~2.2 h on 2× RTX PRO 6000. |
 
 **Software.** Everything installs into a conda env named `particlegs`. You don't
@@ -88,14 +88,36 @@ scheduling), `--gpu B` (base GPU).
 #### Validated recipe on Chameleon Cloud (recommended if you have no local GPU)
 
 We validated the fast path end-to-end on Chameleon; reproducing our exact
-setup takes three steps:
+setup takes three steps on **CHI@UC** (`chi.uc.chameleoncloud.org`):
 
-1. On **CHI@UC** (`chi.uc.chameleoncloud.org`), reserve a bare-metal lease for
-   node type **`gpu_rtx6000`** (1× Quadro RTX 6000, Turing, 24 GB — check the
-   availability calendar a few days ahead; GPU nodes are popular).
-2. Launch it with the **`CC-Ubuntu24.04-CUDA`** image (ships an NVIDIA driver
-   new enough for the cu130 build; no conda needed — the script installs
-   Miniforge).
+1. Reserve a bare-metal lease for node type **`gpu_rtx_6000`** (1× Quadro
+   RTX 6000, Turing, 24 GB — check the availability calendar a few days
+   ahead; GPU nodes are popular). Via the CLI (Blazar, times in UTC):
+
+   ```bash
+   openstack reservation lease create \
+     --end-date "<YYYY-MM-DD HH:MM>" \
+     --reservation min=1,max=1,resource_type=physical:host,resource_properties='["=","$node_type","gpu_rtx_6000"]' \
+     rtx6000-lease
+   ```
+
+2. Launch it with the **`CC-Ubuntu24.04-CUDA`** image. **The image matters**:
+   the plain `CC-Ubuntu*` images ship no NVIDIA driver and `reproduce_ae.sh`
+   will fail on them; the `-CUDA` image preinstalls a driver new enough for
+   the cu130 build (no conda needed — the script installs Miniforge).
+
+   ```bash
+   openstack server create \
+     --image CC-Ubuntu24.04-CUDA \
+     --flavor baremetal \
+     --key-name <your-keypair> \
+     --network sharednet1 \
+     --hint reservation=<reservation id from `lease show rtx6000-lease`> \
+     rtx6000-node
+   ```
+
+   Then attach a floating IP and SSH in as user `cc`.
+
 3. `git clone https://github.com/BoJiang03/ParticleGS && cd ParticleGS`, then
    run the TL;DR: `bash scripts/reproduce_ae.sh --num_gpus 1`.
 
