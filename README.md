@@ -6,6 +6,22 @@ Reviewer quickstart for the **ParticleGS** paper (SC26, `pap525`):
 > Full details are in the separately-submitted **Artifact Description (AD)**.
 > This README is the short path to verifying the badge.
 
+**The paper in one paragraph**: scientific simulations such as the HACC
+cosmology code output
+snapshots of hundreds of millions of particles; exploring them means moving
+multi-GB files and re-rendering them in a visualization tool (ParaView) at
+seconds per frame. ParticleGS instead trains a **3D Gaussian Splatting (3DGS)**
+model of the snapshot's *rendered appearance* and uses it as a compressed,
+directly renderable stand-in for the data: the 280 M-particle HACC snapshot
+(3.4 GB) compresses ~290× and renders interactively (measured 2525× faster
+than ParaView on the raw particles), leading the error-bounded compressor SZ3
+by +7.7 dB PSNR at a matched compression ratio. A small MLP ("VizMapper") lets
+the one trained model follow user-chosen visualization parameters (particle
+radius/opacity) at inference; KD-tree block partitioning with a merge/finetune
+stage scales training; and approximate particle positions can be recovered
+back from the Gaussians (density correlation 0.92). The experiments below
+reproduce each of these claims from the raw particles.
+
 ## TL;DR
 
 ```bash
