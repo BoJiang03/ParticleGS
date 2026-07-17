@@ -104,6 +104,26 @@ _AE_EXPECTED_GPU = "1x RTX 6000"
 AE_SKIP_PREFIXES = ("exp_fire2.", "exp4.blocks_2.", "exp1.exp1c_lcp.")
 
 
+# ── Color (interactive terminals only) ──────────────────────────────────────
+# Plain text when stdout is piped/tee'd to a log, when NO_COLOR is set, or on
+# a dumb terminal — ANSI escapes in a captured AE log would be noise.
+_USE_COLOR = (hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+              and "NO_COLOR" not in os.environ
+              and os.environ.get("TERM") != "dumb")
+
+_GREEN, _RED, _YELLOW, _CYAN, _DIM = "32", "1;31", "33", "36", "2"
+
+
+def _c(code, s):
+    return f"\033[{code}m{s}\033[0m" if _USE_COLOR else s
+
+
+def _ctag(tag):
+    """Color a PASS/FAIL/INFO digest tag."""
+    return _c({"PASS": _GREEN, "FAIL": _RED, "INFO": _CYAN}.get(tag, _YELLOW),
+              tag)
+
+
 # ── Reviewer-facing progress + per-experiment result digest ─────────────────
 # The AE run launches experiments as background subprocesses that log to files,
 # so the top-level terminal would otherwise be quiet for hours. These helpers
@@ -209,12 +229,13 @@ def _alive_ticker(tag, expected_min=None, interval=300, pid=None):
                 # ≥1% of one core, or ≥1 MiB of read/write syscall traffic,
                 # counts as progress; flat on both means nothing is moving.
                 if dcpu < 0.01 * interval and dio < 1048576:
-                    print(f"  [warn ] {tag}  {prog}  {used} — possibly stuck; "
-                          f"check output above / nvidia-smi")
+                    print(_c(_YELLOW,
+                             f"  [warn ] {tag}  {prog}  {used} — possibly "
+                             f"stuck; check output above / nvidia-smi"))
                 else:
-                    print(f"  [alive] {tag}  {prog}  {used}")
+                    print(_c(_DIM, f"  [alive] {tag}  {prog}  {used}"))
             else:
-                print(f"  [alive] {tag}  {prog}")
+                print(_c(_DIM, f"  [alive] {tag}  {prog}"))
             state["act"] = act
 
     th = threading.Thread(target=_tick, daemon=True)
@@ -272,8 +293,9 @@ def _digest_experiment(exp_num):
     res_path = RUNS_DIR / exp_name / "results.json"
     log_hint = RUNS_DIR / "ae_logs" / f"{exp_name}.log"
     if not res_path.exists():
-        print(f"  └─ EXP-{exp_num} produced no results.json "
-              f"(see {log_hint}) — metrics will show MISSING in verify")
+        print(_c(_YELLOW, f"  └─ EXP-{exp_num} produced no results.json "
+                          f"(see {log_hint}) — metrics will show MISSING "
+                          f"in verify"))
         return
     data = json.loads(res_path.read_text())
 
@@ -298,7 +320,7 @@ def _digest_experiment(exp_num):
             tag = "INFO"
         av = vr.format_val(actual, unit)
         ev = vr.format_val(m.get("expected"), unit)
-        print(f"  │   [{tag}] {short:<38} {av:>12}  (paper {ev})")
+        print(f"  │   [{_ctag(tag)}] {short:<38} {av:>12}  (paper {ev})")
     print(f"  └─ details: {res_path}   log: {log_hint}")
 
 
@@ -334,7 +356,7 @@ def run_experiment(exp_num, module_name, description, gpu, extra_args=None,
         rc = proc.wait()
     elapsed = time.time() - t0
 
-    status = "OK" if rc == 0 else "FAILED"
+    status = _c(_GREEN, "OK") if rc == 0 else _c(_RED, "FAILED")
     t = (f"{elapsed / 60:.1f}m/~{expected_min}m "
          f"({100 * elapsed / (expected_min * 60):.0f}%)"
          if expected_min else f"{elapsed / 60:.1f}m")
@@ -385,7 +407,8 @@ def _reap(job, results):
     exp_min = _AE_EXPECTED_MIN.get(job["num"])
     t = (f"{el:.1f}m/~{exp_min}m ({100 * el / exp_min:.0f}%)"
          if exp_min else f"{el:.1f}m")
-    print(f"\n  [ done ] EXP-{job['num']:<2d} {'OK' if ok else 'FAILED'}  "
+    print(f"\n  [ done ] EXP-{job['num']:<2d} "
+          f"{_c(_GREEN, 'OK') if ok else _c(_RED, 'FAILED')}  "
           f"{t}  GPU {job['gpu']}")
     _digest_experiment(job["num"])
     _print_progress()
@@ -427,7 +450,8 @@ def _heartbeat(running, interval=120):
             dt = now - j["hb_t"]
             if (dt > 0 and (act[0] - j["hb_act"][0]) < 0.01 * dt
                     and (act[1] - j["hb_act"][1]) < 1048576):
-                mark = " NO CPU/IO ACTIVITY — possibly stuck, check log"
+                mark = " " + _c(_YELLOW,
+                                "NO CPU/IO ACTIVITY — possibly stuck, check log")
         j["hb_act"], j["hb_t"] = act, now
         parts.append(f"EXP-{j['num']} ({_fmt_dur(now - j['t0'])}{eta}, "
                      f"GPU {j['gpu']}{mark})")
@@ -726,10 +750,10 @@ def main():
     n_ok = sum(1 for v in results.values() if v)
     for num in exp_nums:
         if num in results:
-            status = "PASS" if results[num] else "FAIL"
+            status = _ctag("PASS" if results[num] else "FAIL")
             _, desc = ALL_EXPERIMENTS[num]
             print(f"  EXP-{num:2d}: [{status}] {desc}")
-    print(f"\n{n_ok}/{len(results)} experiments OK")
+    print(f"\n{_c(_GREEN if n_ok == len(results) else _RED, f'{n_ok}/{len(results)} experiments OK')}")
     print(f"Total time: {total_time/3600:.1f} hours")
     print(f"Results directory: {RUNS_DIR}")
 

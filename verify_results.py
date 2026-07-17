@@ -24,10 +24,25 @@ Exit code is 0 if all hw_independent + trend metrics pass, 1 otherwise
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
 ADAE_ROOT = Path(__file__).resolve().parent
+
+# Color PASS/FAIL tags on interactive terminals only — plain when piped/tee'd
+# to a log, when NO_COLOR is set, or on a dumb terminal.
+_USE_COLOR = (hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+              and "NO_COLOR" not in os.environ
+              and os.environ.get("TERM") != "dumb")
+
+
+def _c(code, s):
+    return f"\033[{code}m{s}\033[0m" if _USE_COLOR else s
+
+
+def _ctag(tag):
+    return _c({"PASS": "32", "FAIL": "1;31", "INFO": "36"}.get(tag, "33"), tag)
 
 
 def load_json(path):
@@ -156,9 +171,9 @@ def main():
                 key = "hw_indep_fail" if m["class"] == "hw_independent" else "trend_fail"
                 counts[key] += 1
                 fails.append(path)
-                print(f"[FAIL] {path}  (no {exp_name}/results.json — experiment did not run)")
+                print(f"[{_ctag('FAIL')}] {path}  (no {exp_name}/results.json — experiment did not run)")
             else:
-                print(f"[INFO] {path}  (no {exp_name}/results.json; hardware-dependent, reported only)")
+                print(f"[{_ctag('INFO')}] {path}  (no {exp_name}/results.json; hardware-dependent, reported only)")
             continue
 
         actual = get_nested(data, inner_path)
@@ -172,7 +187,7 @@ def main():
                 m.get("tolerance_abs"), m.get("tolerance_rel"))
             tag = "PASS" if ok else "FAIL"
             counts["hw_indep_pass" if ok else "hw_indep_fail"] += 1
-            print(f"[{tag}] {path}")
+            print(f"[{_ctag(tag)}] {path}")
             print(f"       expected {format_val(expected, unit)}, "
                   f"actual {format_val(actual, unit)}  ({detail})")
             if not ok:
@@ -183,7 +198,7 @@ def main():
                 actual, m.get("trend_rule", "gt"), m.get("trend_threshold", 0))
             tag = "PASS" if ok else "FAIL"
             counts["trend_pass" if ok else "trend_fail"] += 1
-            print(f"[{tag}] {path}  (trend)")
+            print(f"[{_ctag(tag)}] {path}  (trend)")
             print(f"       {detail}")
             if not ok:
                 fails.append(path)
@@ -191,14 +206,14 @@ def main():
         elif cls == "hw_dependent":
             counts["hw_dep_reported"] += 1
             ref_gpu = m.get("reference_gpu", "reference GPU")
-            print(f"[INFO] {path}  (hardware-dependent, reported only)")
+            print(f"[{_ctag('INFO')}] {path}  (hardware-dependent, reported only)")
             print(f"       reviewer {format_val(actual, unit)}, "
                   f"reference {format_val(expected, unit)} on {ref_gpu}")
             if "note" in m:
                 print(f"       note: {m['note']}")
 
         else:
-            print(f"[WARN] {path}  (unknown class {cls!r})")
+            print(f"[{_ctag('WARN')}] {path}  (unknown class {cls!r})")
 
     # Summary
     print("=" * 80)
@@ -213,9 +228,11 @@ def main():
     if counts["missing"]:
         print(f"Missing results.json: {counts['missing']} metrics "
               f"(scored ones counted as FAIL)")
-    print(f"OVERALL:              {strict_pass}/{total_strict} enforced metrics passed")
+    print(_c("32" if not fails else "1;31",
+             f"OVERALL:              {strict_pass}/{total_strict} "
+             f"enforced metrics passed"))
     if fails:
-        print("\nFailed metrics:")
+        print(_c("1;31", "\nFailed metrics:"))
         for f in fails:
             print(f"  - {f}")
 
