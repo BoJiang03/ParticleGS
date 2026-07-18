@@ -92,6 +92,17 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
+# Step banners in color on interactive terminals only — plain when piped/tee'd
+# to a log, when NO_COLOR is set, or on a dumb terminal (matches run_all.py).
+if [[ -t 1 && -z "${NO_COLOR:-}" && "${TERM:-}" != "dumb" ]]; then
+    C_HDR=$'\033[1m'        # bold: top banner / DONE frame
+    C_STEP=$'\033[1;36m'    # bold cyan: [setup]/[data]/[run]/... step lines
+    C_OK=$'\033[1;32m'      # bold green: DONE line
+    C_OFF=$'\033[0m'
+else
+    C_HDR=""; C_STEP=""; C_OK=""; C_OFF=""
+fi
+
 NUM_GPUS=4
 GPU=0
 EXP="1,4,6,7,8,11,14"
@@ -117,7 +128,7 @@ done
 # bootstrap_ae.sh installs Miniforge if conda is absent and creates the env from
 # the CUDA-13.0 or CUDA-12.6 spec depending on the driver's max CUDA version.
 if [[ "${SETUP}" = 1 ]]; then
-    echo; echo "[setup] ensuring conda + built 'particlegs' env..."
+    echo; echo "${C_STEP}[setup] ensuring conda + built 'particlegs' env...${C_OFF}"
     bash "${REPO_ROOT}/scripts/bootstrap_ae.sh"
 fi
 # Make `python` below resolve to the particlegs env. Harmless if already active.
@@ -137,8 +148,8 @@ if [[ -n "${_cbase}" && -f "${_cbase}/etc/profile.d/conda.sh" ]]; then
     set -u
 fi
 
-echo "======================================================================"
-echo "ParticleGS — AE reproduction (18 enforced metrics, reduced fast path)"
+echo "${C_HDR}======================================================================"
+echo "ParticleGS — AE reproduction (18 enforced metrics, reduced fast path)${C_OFF}"
 echo "  num_gpus:    ${NUM_GPUS}"
 echo "  gpu base:    ${GPU}"
 echo "  experiments: ${EXP}"
@@ -151,14 +162,14 @@ if [[ "${EVAL_ONLY}" = 0 ]]; then
     if [[ ! -f "${REPO_ROOT}/data/hacc_raw/xx.f32" \
        || ! -f "${REPO_ROOT}/data/hacc_raw/yy.f32" \
        || ! -f "${REPO_ROOT}/data/hacc_raw/zz.f32" ]]; then
-        echo; echo "[data] raw HACC files missing — fetching medium (280M) dataset..."
+        echo; echo "${C_STEP}[data] raw HACC files missing — fetching medium (280M) dataset...${C_OFF}"
         bash "${REPO_ROOT}/data/download_data.sh" --medium
     fi
     if [[ ",${EXP}," == *",13,"* ]]; then
         if [[ ! -f "${REPO_ROOT}/data/fire2_raw/xx.f32" \
            || ! -f "${REPO_ROOT}/data/fire2_raw/yy.f32" \
            || ! -f "${REPO_ROOT}/data/fire2_raw/zz.f32" ]]; then
-            echo; echo "[data] raw FIRE-2 files missing — fetching L172 snapshot 010..."
+            echo; echo "${C_STEP}[data] raw FIRE-2 files missing — fetching L172 snapshot 010...${C_OFF}"
             bash "${REPO_ROOT}/data/download_fire2.sh"
         fi
     fi
@@ -175,28 +186,28 @@ fi
 # scheduling. Eval-only re-runs the same set; experiments that find an
 # existing trained model on disk skip their training stage.
 echo
-echo "[run] experiments.run_all --ae --exp ${EXP} --gpu ${GPU} --num_gpus ${NUM_GPUS} ${SEQUENTIAL}"
+echo "${C_STEP}[run] experiments.run_all --ae --exp ${EXP} --gpu ${GPU} --num_gpus ${NUM_GPUS} ${SEQUENTIAL}${C_OFF}"
 python -u -m experiments.run_all \
     --ae --exp "${EXP}" --gpu "${GPU}" --num_gpus "${NUM_GPUS}" ${SEQUENTIAL}
 
 # ── 3. Aggregate + verify ────────────────────────────────────────────────
 echo
-echo "[aggregate] collecting runs/exp*/results.json into tables..."
+echo "${C_STEP}[aggregate] collecting runs/exp*/results.json into tables...${C_OFF}"
 python "${REPO_ROOT}/scripts/aggregate_results.py" --out "${REPO_ROOT}/runs/summary" || true
 
 if [[ "${VERIFY}" = 1 && -f "${REPO_ROOT}/verify_results.py" ]]; then
     echo
-    echo "[verify] checking results against reference_results.json (AE reduced set)..."
+    echo "${C_STEP}[verify] checking results against reference_results.json (AE reduced set)...${C_OFF}"
     python "${REPO_ROOT}/verify_results.py" --ae
 fi
 
 echo
-echo "======================================================================"
+echo "${C_HDR}======================================================================${C_OFF}"
 # runs/ae_logs/ only exists in parallel mode (sequential runs print each
 # experiment straight to the terminal) — only mention it when it was written.
 if [[ -z "${SEQUENTIAL}" && "${NUM_GPUS}" -gt 1 ]]; then
-    echo "DONE. Tables: runs/summary/ ; per-experiment logs: runs/ae_logs/"
+    echo "${C_OK}DONE.${C_OFF} Tables: runs/summary/ ; per-experiment logs: runs/ae_logs/"
 else
-    echo "DONE. Tables: runs/summary/"
+    echo "${C_OK}DONE.${C_OFF} Tables: runs/summary/"
 fi
-echo "======================================================================"
+echo "${C_HDR}======================================================================${C_OFF}"

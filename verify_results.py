@@ -154,7 +154,7 @@ def main():
 
     print(f"Verifying results in: {runs_dir}")
     print(f"Against reference:    {args.reference}")
-    print("=" * 80)
+    print(_c("1", "=" * 80))
 
     for m in ref["metrics"]:
         path = m["path"]
@@ -216,7 +216,7 @@ def main():
             print(f"[{_ctag('WARN')}] {path}  (unknown class {cls!r})")
 
     # Summary
-    print("=" * 80)
+    print(_c("1", "=" * 80))
     total_strict = (counts["hw_indep_pass"] + counts["hw_indep_fail"]
                     + counts["trend_pass"] + counts["trend_fail"])
     strict_pass = counts["hw_indep_pass"] + counts["trend_pass"]

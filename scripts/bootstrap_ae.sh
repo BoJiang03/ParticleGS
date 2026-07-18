@@ -27,6 +27,13 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 ENV_NAME="particlegs"
 
+# Phase lines in bold cyan on interactive terminals only (matches reproduce_ae.sh).
+if [[ -t 1 && -z "${NO_COLOR:-}" && "${TERM:-}" != "dumb" ]]; then
+    C_STEP=$'\033[1;36m'; C_OFF=$'\033[0m'
+else
+    C_STEP=""; C_OFF=""
+fi
+
 # conda's shell hooks are NOT nounset-clean: the base hook reads $PS1, and some
 # activate.d scripts (e.g. cuda-nvcc 12.6's ~cuda-nvcc_activate.sh expands
 # $NVCC_PREPEND_FLAGS with no default) reference unset vars. Under `set -u` that
@@ -41,7 +48,7 @@ if ! command -v conda >/dev/null 2>&1; then
     if [[ -x "${CONDA_ROOT}/bin/conda" ]]; then
         echo "[bootstrap] using existing conda at ${CONDA_ROOT}"
     else
-        echo "[bootstrap] conda not found — installing Miniforge into ${CONDA_ROOT}"
+        echo "${C_STEP}[bootstrap] conda not found — installing Miniforge into ${CONDA_ROOT}${C_OFF}"
         arch="$(uname -m)"   # x86_64 or aarch64
         url="https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-${arch}.sh"
         tmp="$(mktemp -d)"
@@ -91,15 +98,15 @@ if conda env list | awk '{print $1}' | grep -qx "${ENV_NAME}"; then
     echo "[bootstrap] conda env '${ENV_NAME}' already exists — skipping create."
     echo "            (delete it with 'conda env remove -n ${ENV_NAME}' to rebuild)"
 else
-    echo "[bootstrap] creating env '${ENV_NAME}' from ${ENV_FILE}..."
+    echo "${C_STEP}[bootstrap] creating env '${ENV_NAME}' from ${ENV_FILE}...${C_OFF}"
     conda env create -n "${ENV_NAME}" -f "${REPO_ROOT}/${ENV_FILE}"
 fi
 nou conda activate "${ENV_NAME}"
 
 # ── 4. build extensions + SZ3/LCP in the active env ──────────────────────────
-echo "[bootstrap] building CUDA extensions + baselines (install.sh --no-env)..."
+echo "${C_STEP}[bootstrap] building CUDA extensions + baselines (install.sh --no-env)...${C_OFF}"
 bash "${REPO_ROOT}/install.sh" --no-env
 
 echo
-echo "[bootstrap] done. Environment '${ENV_NAME}' is built and self-checked."
+echo "${C_STEP}[bootstrap] done. Environment '${ENV_NAME}' is built and self-checked.${C_OFF}"
 echo "            conda base: $(conda info --base)"

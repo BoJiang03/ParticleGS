@@ -115,6 +115,10 @@ _USE_COLOR = (hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
               and os.environ.get("TERM") != "dumb")
 
 _GREEN, _RED, _YELLOW, _CYAN, _DIM = "32", "1;31", "33", "36", "2"
+# Structural text: bold for top-level section banners, bold-cyan for the
+# per-experiment / per-segment separators — so a reviewer scrolling the run
+# can spot experiment boundaries at a glance.
+_BOLD, _BCYAN = "1", "1;36"
 
 
 def _c(code, s):
@@ -310,8 +314,9 @@ def _digest_experiment(exp_num):
         return
     data = json.loads(res_path.read_text())
 
-    print(f"  ┌─ EXP-{exp_num} results vs paper "
-          f"({len(metrics)} enforced metric{'s' if len(metrics) != 1 else ''}):")
+    print(_c(_CYAN, f"  ┌─ EXP-{exp_num} results vs paper "
+                    f"({len(metrics)} enforced "
+                    f"metric{'s' if len(metrics) != 1 else ''}):"))
     for m in metrics:
         inner = m["path"].split(".", 1)[1]
         actual = vr.get_nested(data, inner)
@@ -349,12 +354,12 @@ def _exp_cmd(exp_num, gpu, extra_args, skip_data_prep):
 def run_experiment(exp_num, module_name, description, gpu, extra_args=None,
                    skip_data_prep=True, expected_min=None):
     """Run one experiment as a subprocess (blocking, inherits stdout)."""
-    print(f"\n{'#'*70}")
-    print(f"# EXP-{exp_num}: {description}")
+    print(_c(_BCYAN, f"\n{'#'*70}"))
+    print(_c(_BCYAN, f"# EXP-{exp_num}: {description}"))
     if expected_min:
-        print(f"# expected ~{expected_min} min on {_AE_EXPECTED_GPU} "
-              f"(validated recipe; other GPUs differ)")
-    print(f"{'#'*70}\n")
+        print(_c(_BCYAN, f"# expected ~{expected_min} min on {_AE_EXPECTED_GPU} "
+                         f"(validated recipe; other GPUs differ)"))
+    print(_c(_BCYAN, f"{'#'*70}") + "\n")
 
     cmd = [PYTHON_BIN, "-m", f"experiments.{module_name}", "--gpu", str(gpu)]
     if skip_data_prep:
@@ -403,7 +408,8 @@ def _spawn(exp_num, gpu, extra_args, skip_data_prep, log_path, gpus_held=None, e
                             stdout=logf, stderr=subprocess.STDOUT, env=env)
     exp_min = _AE_EXPECTED_MIN.get(exp_num)
     eta = f", expected ~{exp_min}m" if exp_min else ""
-    print(f"  [launch] EXP-{exp_num:<2d} on GPU {gpu}  (log: {log_path.name}{eta})")
+    print(f"  [{_c(_CYAN, 'launch')}] EXP-{exp_num:<2d} on GPU {gpu}  "
+          f"(log: {log_path.name}{eta})")
     return {"num": exp_num, "gpu": gpu, "proc": proc, "log": logf,
             "t0": time.time(), "path": log_path,
             "gpus_held": list(gpus_held) if gpus_held is not None else [gpu]}
@@ -620,9 +626,9 @@ def run_ae_parallel(exp_nums, num_gpus, ae_quick, logdir):
 
     # ---- Segment 1: EXP-1 isolated ----
     if 1 in exp_set:
-        print(f"\n{'='*70}\n=== AE Segment 1/3 (isolated): EXP-1 solo — "
+        print(_c(_BCYAN, f"\n{'='*70}\n=== AE Segment 1/3 (isolated): EXP-1 solo — "
               f"{'shipped E25 -> eval + SZ3 iso-CR' if ae_quick else 'end-to-end train time + E25 model'} "
-              f"===\n{'='*70}")
+              f"===\n{'='*70}"))
         job = _spawn(1, gpus[0],
                      (["--ae", "--use_pretrained_e25"] if ae_quick else []), True,
                      logdir / "exp1.log", env=full_env)
@@ -632,17 +638,17 @@ def run_ae_parallel(exp_nums, num_gpus, ae_quick, logdir):
 
     # ---- Segment 2: EXP-4 all-GPU block train, then 7/8/14 overlap the tail ----
     if seg2:
-        print(f"\n{'='*70}\n=== AE Segment 2/3 (mixed): {seg2} across {num_gpus} "
+        print(_c(_BCYAN, f"\n{'='*70}\n=== AE Segment 2/3 (mixed): {seg2} across {num_gpus} "
               f"GPUs (CPU cap {max(1, cores // max(1, num_gpus))} threads/proc) "
-              f"===\n{'='*70}")
+              f"===\n{'='*70}"))
         _run_ae_seg2(seg2, gpus, ae_quick, par_env, logdir, results)
 
     # ---- Segment 3: isolated timing/perf experiments, one at a time ----
     for n in ISOLATED_TIMING:
         if n == 1 or n not in exp_set:
             continue
-        print(f"\n{'='*70}\n=== AE Segment 3/3 (isolated): EXP-{n} solo — valid "
-              f"timing/perf ===\n{'='*70}")
+        print(_c(_BCYAN, f"\n{'='*70}\n=== AE Segment 3/3 (isolated): EXP-{n} solo — valid "
+              f"timing/perf ===\n{'='*70}"))
         job = _spawn(n, gpus[0], (["--ae"] if ae_quick else []), True,
                      logdir / f"exp{n}.log", env=full_env)
         _wait_and_reap(job, results)
@@ -676,9 +682,10 @@ def main():
 
     parallel = args.ae and not args.sequential and args.num_gpus > 1
 
-    print("="*70)
-    print("ParticleGS — Experiment Reproduction" + ("  [AE mode]" if args.ae else ""))
-    print("="*70)
+    print(_c(_BOLD, "="*70))
+    print(_c(_BOLD, "ParticleGS — Experiment Reproduction"
+                    + ("  [AE mode]" if args.ae else "")))
+    print(_c(_BOLD, "="*70))
     print(f"Experiments: {exp_nums}")
     print(f"GPU base: {args.gpu}   num_gpus: {args.num_gpus}   "
           f"mode: {'parallel' if parallel else 'sequential'}")
@@ -697,9 +704,9 @@ def main():
 
     # Step 1: Prepare shared data ONCE (VTP, normalization, PLY, eval GT images)
     # so concurrent experiments never race on generating it.
-    print("="*70)
-    print("Preparing shared data...")
-    print("="*70)
+    print(_c(_BOLD, "="*70))
+    print(_c(_BOLD, "Preparing shared data..."))
+    print(_c(_BOLD, "="*70))
     if args.ae:
         print(f"(expected ~20 min on {_AE_EXPECTED_GPU} when cold: one-time VTP "
               f"conversion + eval GT render; seconds if already cached)")
@@ -758,9 +765,9 @@ def main():
 
     # Summary
     total_time = time.time() - t0_total
-    print(f"\n{'='*70}")
-    print("FINAL SUMMARY")
-    print(f"{'='*70}")
+    print(_c(_BOLD, f"\n{'='*70}"))
+    print(_c(_BOLD, "FINAL SUMMARY"))
+    print(_c(_BOLD, f"{'='*70}"))
     n_ok = sum(1 for v in results.values() if v)
     for num in exp_nums:
         if num in results:
