@@ -192,5 +192,11 @@ fi
 
 echo
 echo "======================================================================"
-echo "DONE. Tables: runs/summary/ ; per-experiment logs: runs/ae_logs/"
+# runs/ae_logs/ only exists in parallel mode (sequential runs print each
+# experiment straight to the terminal) — only mention it when it was written.
+if [[ -z "${SEQUENTIAL}" && "${NUM_GPUS}" -gt 1 ]]; then
+    echo "DONE. Tables: runs/summary/ ; per-experiment logs: runs/ae_logs/"
+else
+    echo "DONE. Tables: runs/summary/"
+fi
 echo "======================================================================"

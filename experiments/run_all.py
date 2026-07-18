@@ -271,6 +271,13 @@ def _load_reference():
     return _REF_CACHE["ref"]
 
 
+# Set by main() when parallel mode redirects each experiment's output to
+# per-experiment log files under runs/ae_logs/. Stays None in sequential mode,
+# where experiments inherit the terminal and no log files exist — never point
+# reviewers at a directory that was not created.
+_AE_LOG_DIR = None
+
+
 def _digest_experiment(exp_num):
     """Print a compact PASS/FAIL digest of one experiment's enforced metrics
     the moment it finishes, so reviewers see the headline numbers (and whether
@@ -294,10 +301,11 @@ def _digest_experiment(exp_num):
         return
 
     res_path = RUNS_DIR / exp_name / "results.json"
-    log_hint = RUNS_DIR / "ae_logs" / f"{exp_name}.log"
+    where = (f"see {_AE_LOG_DIR / (exp_name + '.log')}" if _AE_LOG_DIR
+             else "see the output above")
     if not res_path.exists():
         print(_c(_YELLOW, f"  └─ EXP-{exp_num} produced no results.json "
-                          f"(see {log_hint}) — metrics will show MISSING "
+                          f"({where}) — metrics will show MISSING "
                           f"in verify"))
         return
     data = json.loads(res_path.read_text())
@@ -324,7 +332,8 @@ def _digest_experiment(exp_num):
         av = vr.format_val(actual, unit)
         ev = vr.format_val(m.get("expected"), unit)
         print(f"  │   [{_ctag(tag)}] {short:<38} {av:>12}  (paper {ev})")
-    print(f"  └─ details: {res_path}   log: {log_hint}")
+    log_part = f"   log: {_AE_LOG_DIR / (exp_name + '.log')}" if _AE_LOG_DIR else ""
+    print(f"  └─ details: {res_path}{log_part}")
 
 
 def _exp_cmd(exp_num, gpu, extra_args, skip_data_prep):
@@ -713,6 +722,8 @@ def main():
                 print(f"WARNING: Unknown experiment EXP-{n}, skipping")
         exp_nums = [n for n in exp_nums if n in ALL_EXPERIMENTS]
         logdir = Path(args.logdir) if args.logdir else RUNS_DIR / "ae_logs"
+        global _AE_LOG_DIR
+        _AE_LOG_DIR = logdir
         results = run_ae_parallel(exp_nums, args.num_gpus, args.ae, logdir)
     else:
         results = {}
@@ -766,7 +777,8 @@ def main():
         print(f"\nNext:")
         print(f"  • Per-experiment numbers vs paper were printed above as each "
               f"experiment finished.")
-        print(f"  • Per-experiment logs:  {RUNS_DIR / 'ae_logs'}/exp*.log")
+        if _AE_LOG_DIR:
+            print(f"  • Per-experiment logs:  {_AE_LOG_DIR}/exp*.log")
         print(f"  • Aggregated tables:    {RUNS_DIR / 'summary'}/  "
               f"(scripts/aggregate_results.py)")
         print(f"  • Final verification:   python verify_results.py --ae  "
