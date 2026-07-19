@@ -293,7 +293,7 @@ def run_fire2_experiment(gpu=0, output_dir=None, skip_data_prep=False):
         "num_particles": n_particles,
         "num_gaussians": stats["num_gaussians"],
         "size_mb": round(stats["size_mb"], 1),
-        "cr": round(cr, 0),
+        "cr": round(cr, 1),
         "avg_psnr": eval_results["avg"]["psnr"],
         "avg_masked_psnr": eval_results["avg"]["masked_psnr"],
         "eval": eval_results,
@@ -314,7 +314,7 @@ def run_fire2_experiment(gpu=0, output_dir=None, skip_data_prep=False):
     print(f"  Masked PSNR:  {mpsnr:.2f} dB" if mpsnr else "  Masked PSNR:  N/A")
     print(f"  Model size:   {result['size_mb']:.1f} MB")
     print(f"  Gaussians:    {result['num_gaussians']:,}")
-    print(f"  CR:           ~{result['cr']:.0f}x")
+    print(f"  CR:           {result['cr']:.1f}x")
     print(f"  Time:         {elapsed/60:.1f} min")
 
     return result

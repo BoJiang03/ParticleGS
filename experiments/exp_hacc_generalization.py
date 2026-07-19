@@ -396,7 +396,7 @@ def run_hacc_generalization(num_blocks=4, gpu=0, output_dir=None,
             "bounds": block["bounds"],
             "num_gaussians": stats["num_gaussians"],
             "size_mb": round(stats["size_mb"], 1),
-            "cr": round(cr, 0),
+            "cr": round(cr, 1),
             "avg_psnr": eval_results["avg"]["psnr"],
             "avg_masked_psnr": eval_results["avg"]["masked_psnr"],
             "eval": eval_results,
@@ -409,7 +409,7 @@ def run_hacc_generalization(num_blocks=4, gpu=0, output_dir=None,
         print(f"\n  Block {bid}: "
               + (f"{mpsnr:.2f} dB masked PSNR, " if mpsnr else "N/A, ")
               + f"{result['size_mb']} MB, {result['num_gaussians']} Gaussians, "
-              + f"~{result['cr']:.0f}x CR")
+              + f"{result['cr']:.1f}x CR")
 
         # Save intermediate results
         save_results(all_results, output_dir / "results.json")

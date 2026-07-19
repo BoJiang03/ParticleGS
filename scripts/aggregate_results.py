@@ -61,7 +61,7 @@ def tab5_rate_distortion(exp1, exp12):
     e25 = exp1.get("exp1b_e25") or {}
     if e25:
         lines.append(f"- PSNR: {fmt(e25.get('avg_psnr'))} dB  /  masked: {fmt(e25.get('avg_masked_psnr'))} dB")
-        lines.append(f"- Gaussians: {fmt(e25.get('num_gaussians'), 0)}  size: {fmt(e25.get('size_mb'), 1)} MB  CR: {fmt(e25.get('cr'), 0)}×")
+        lines.append(f"- Gaussians: {fmt(e25.get('num_gaussians'), 0)}  size: {fmt(e25.get('size_mb'), 1)} MB  CR: {fmt(e25.get('cr'), 1)}×")
         if exp12 and "e25_ssim" in exp12:
             lines.append(f"- SSIM: {fmt(exp12['e25_ssim'], 4)}")
     else:
@@ -186,7 +186,7 @@ def fire2_generalization(fire2):
              f"| Masked PSNR | {fmt(fire2.get('avg_masked_psnr'))} dB |",
              f"| Gaussians | {fmt(fire2.get('num_gaussians'), 0)} |",
              f"| Model size | {fmt(fire2.get('size_mb'), 1)} MB |",
-             f"| Compression ratio | {fmt(fire2.get('cr'), 0)}× |"]
+             f"| Compression ratio | {fmt(fire2.get('cr'), 1)}× |"]
     return "\n".join(lines)
 
 

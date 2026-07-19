@@ -464,7 +464,7 @@ def run_exp1b(output_dir, shared_data, gpu=0, use_pretrained=False):
         "model": "E25",
         "num_gaussians": stats["num_gaussians"],
         "size_mb": round(stats["size_mb"], 1),
-        "cr": round(cr, 0),
+        "cr": round(cr, 1),
         "avg_psnr": eval_results["avg"]["psnr"],
         "avg_masked_psnr": eval_results["avg"]["masked_psnr"],
         "end_to_end_train_s": round(train_elapsed, 1),
@@ -485,7 +485,7 @@ def run_exp1b(output_dir, shared_data, gpu=0, use_pretrained=False):
     print(f"\n  E25: {mpsnr:.2f} dB masked PSNR, " if mpsnr else "\n  E25: N/A masked PSNR, ",
           end="")
     print(f"{result['size_mb']} MB, {result['num_gaussians']} Gaussians, "
-          f"~{result['cr']:.0f}x CR")
+          f"{result['cr']:.1f}x CR")
     return result
 
 
@@ -736,8 +736,8 @@ def main():
                 break
         if sz3_at_cr and e25["avg_masked_psnr"]:
             delta = e25["avg_masked_psnr"] - (sz3_at_cr["avg_masked_psnr"] or 0)
-            print(f"\n  3DGS E25: {e25['avg_masked_psnr']:.2f} dB @ ~{e25['cr']:.0f}x CR")
-            print(f"  SZ3:      {sz3_at_cr['avg_masked_psnr']:.2f} dB @ {sz3_at_cr['cr']:.0f}x CR")
+            print(f"\n  3DGS E25: {e25['avg_masked_psnr']:.2f} dB @ {e25['cr']:.1f}x CR")
+            print(f"  SZ3:      {sz3_at_cr['avg_masked_psnr']:.2f} dB @ {sz3_at_cr['cr']:.1f}x CR")
             print(f"  Delta:    +{delta:.1f} dB")
 
     # Load existing results for merging (if only_lcp, keep prior sz3/e25 results)
