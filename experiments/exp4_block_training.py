@@ -629,16 +629,23 @@ def main():
     print(f"\n{'='*70}")
     print("EXP-4: Block Training Summary")
     print(f"{'='*70}")
-    headers = ["Blocks", "Merged mPSNR", "FT mPSNR", "Gaussians", "Size (MB)"]
+    headers = ["Blocks", "Merged PSNR", "Merged mPSNR", "FT PSNR", "FT mPSNR",
+               "Gaussians", "Size (MB)"]
     if args.compute_ssim:
         headers.append("SSIM")
+
+    def _f(v):
+        return f"{v:.2f}" if v else "N/A"
+
     rows = []
     for n in block_counts:
         r = results[f"blocks_{n}"]
         row = [
             n,
-            f"{r['merged']['masked_psnr']:.2f}" if r["merged"]["masked_psnr"] else "N/A",
-            f"{r['finetuned']['masked_psnr']:.2f}" if r["finetuned"]["masked_psnr"] else "N/A",
+            _f(r["merged"]["psnr"]),
+            _f(r["merged"]["masked_psnr"]),
+            _f(r["finetuned"]["psnr"]),
+            _f(r["finetuned"]["masked_psnr"]),
             f"{r['finetuned']['num_gaussians']/1000:.0f}k",
             r["finetuned"]["size_mb"],
         ]
@@ -647,6 +654,8 @@ def main():
             row.append(f"{ssim:.4f}" if ssim else "N/A")
         rows.append(row)
     print_table(headers, rows)
+    print("  PSNR = full-image (what paper Tab. III prints); "
+          "mPSNR = foreground-masked (what verify_results.py enforces)")
 
     save_results(results, output_dir / "results.json")
     print(f"\nEXP-4 complete ({(time.time()-t0)/60:.1f} min)")

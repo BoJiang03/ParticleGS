@@ -482,9 +482,11 @@ def run_exp1b(output_dir, shared_data, gpu=0, use_pretrained=False):
               f"(data-gen + 3-stage training; isolated run only)")
 
     mpsnr = result.get('avg_masked_psnr')
-    print(f"\n  E25: {mpsnr:.2f} dB masked PSNR, " if mpsnr else "\n  E25: N/A masked PSNR, ",
-          end="")
-    print(f"{result['size_mb']} MB, {result['num_gaussians']} Gaussians, "
+    fpsnr = result.get('avg_psnr')
+    print(f"\n  E25: {f'{fpsnr:.2f}' if fpsnr else 'N/A'} dB PSNR "
+          f"(full-image, paper Tab. VI) / "
+          f"{f'{mpsnr:.2f}' if mpsnr else 'N/A'} dB masked (enforced), "
+          f"{result['size_mb']} MB, {result['num_gaussians']} Gaussians, "
           f"{result['cr']:.1f}x CR")
     return result
 
