@@ -336,7 +336,16 @@ def _digest_experiment(exp_num):
             tag = "INFO"
         av = vr.format_val(actual, unit)
         ev = vr.format_val(m.get("expected"), unit)
-        print(f"  │   [{_ctag(tag)}] {short:<38} {av:>12}  (paper {ev})")
+        if cls == "hw_dependent":
+            # Absolute time/FPS/memory references were measured on the
+            # authors' workstation — a different value here is expected,
+            # not a failure.
+            gpu = m.get("reference_gpu")
+            where = f"authors' {gpu}" if gpu else "authors' workstation"
+            ref = f"({where}: {ev} — hw-dependent, not scored)"
+        else:
+            ref = f"(paper {ev})"
+        print(f"  │   [{_ctag(tag)}] {short:<38} {av:>12}  {ref}")
     log_part = f"   log: {_AE_LOG_DIR / (exp_name + '.log')}" if _AE_LOG_DIR else ""
     print(f"  └─ details: {res_path}{log_part}")
 
