@@ -24,18 +24,34 @@ reproduce each of these claims from the raw particles.
 
 ## TL;DR
 
+Fast path for reviewers — verifies the 18 scored metrics. Validated end-to-end
+on a Chameleon Cloud `gpu_rtx_6000` node in ~7 h (fits the ~8 h AE budget;
+details and caveats in §4):
+
 ```bash
-# Fast path for reviewers — verifies the 18 scored metrics. One command on a
-# bare node: it installs the env and runs. ~7 h on a Chameleon Cloud
-# gpu_rtx_6000 node (validated, see §2 — fits the ~8 h AE budget), ~2.2 h on
-# 2x RTX PRO 6000. Set --num_gpus to your GPU count.
+# 1. Chameleon Cloud (CHI@UC): reserve + launch a bare-metal RTX 6000 node.
+#    Skip this step if you already have a Linux box with a CUDA GPU (see §2).
+openstack reservation lease create --end-date "<YYYY-MM-DD HH:MM>" \
+  --reservation min=1,max=1,resource_type=physical:host,resource_properties='["=","$node_type","gpu_rtx_6000"]' \
+  rtx6000-lease
+openstack server create --image CC-Ubuntu24.04-CUDA --flavor baremetal \
+  --key-name <your-keypair> --network sharednet1 \
+  --hint reservation=<reservation id from `lease show rtx6000-lease`> \
+  rtx6000-node
+# ... attach a floating IP, SSH in as user `cc`.
+
+# 2. Clone.
+git clone https://github.com/BoJiang03/ParticleGS && cd ParticleGS
+
+# 3. Run. One command on a bare node: installs the env, fetches data, runs the
+#    experiments (~7 h on 1x RTX 6000; ~2.2 h on 2x RTX PRO 6000 — set
+#    --num_gpus to your GPU count), then verifies.
 bash scripts/reproduce_ae.sh --num_gpus 1
 python verify_results.py --ae          # PASS/FAIL vs the reference values
-
-# Full reproduction — retrains everything, all 26 metrics (~11–15 h).
-bash scripts/reproduce.sh --num_gpus 1
-python verify_results.py
 ```
+
+Full reproduction — retrains everything, all 26 metrics (~11–15 h):
+`bash scripts/reproduce.sh --num_gpus 1 && python verify_results.py`
 
 The fast path **ships the pre-trained E25 single-block model and the 4 sub-block
 models** (the two slowest trainings), trains only the 4-block finetune live
